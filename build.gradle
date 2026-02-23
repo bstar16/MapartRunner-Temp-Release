@@ -51,7 +51,7 @@ java {
 
 jar {
 	from("LICENSE") {
-		rename { fileName -> "${fileName}_${archivesBaseName}" }
+		rename "LICENSE", "LICENSE_${archivesBaseName}"
 	}
 }
 
