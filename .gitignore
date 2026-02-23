@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+out/
+*.jar
+*.war
+
+# Eclipse
+.eclipse/
+.classpath
+.project
+.settings/
+
+# IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# NetBeans
+nbproject/
+nb-configuration.xml
+
+# VS Code
+.vscode/
+.factorypath
+
+# Mac OS
+.DS_Store
+
+# Environment
+.env
+.env.local
