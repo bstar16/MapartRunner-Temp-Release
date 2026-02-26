@@ -90,6 +90,28 @@ public class BuildCoordinator {
         }
     }
 
+
+    public Optional<String> stop() {
+        if (session == null) {
+            return Optional.of("No build session.");
+        }
+
+        if (session.getState() == BuildPlanState.IDLE) {
+            return Optional.of("No active build session.");
+        }
+
+        try {
+            session.getProgress().reset();
+            if (session.getState() != BuildPlanState.LOADED) {
+                session.transitionTo(BuildPlanState.LOADED);
+            }
+            progressStore.saveProgress(session);
+            return Optional.empty();
+        } catch (IllegalStateException exception) {
+            return Optional.of("Cannot stop from state " + session.getState() + ".");
+        }
+    }
+
     public Optional<String> resume() {
         if (session == null) {
             return Optional.of("No build session.");

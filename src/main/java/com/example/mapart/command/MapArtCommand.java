@@ -117,6 +117,16 @@ public final class MapArtCommand {
                             context.getSource().sendFeedback(() -> Text.literal("Build session resumed."), false);
                             return 1;
                         }))
+                .then(CommandManager.literal("stop")
+                        .executes(context -> {
+                            Optional<String> error = planService.coordinator().stop();
+                            if (error.isPresent()) {
+                                context.getSource().sendError(Text.literal(error.get()));
+                                return 0;
+                            }
+                            context.getSource().sendFeedback(() -> Text.literal("Build stopped and progress reset."), false);
+                            return 1;
+                        }))
                 .then(CommandManager.literal("next")
                         .executes(context -> {
                             BuildCoordinator.StepResult result = planService.coordinator().next(context.getSource());
