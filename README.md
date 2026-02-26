@@ -85,11 +85,13 @@ The mod registers these command roots:
 Available subcommands:
 - `load <path>` (OP level 2 required)
 - `info`
+- `unload` (OP level 2 required)
 
 Example:
 ```mcfunction
 /mapart load /absolute/path/to/build.schem
 /mapart info
+/mapart unload
 ```
 
 If `/mapart` is unknown in game:
@@ -122,20 +124,6 @@ If the standard commands fail even when typed correctly, check the items below.
    ./gradlew --stop
    ./gradlew --refresh-dependencies build
    ```
-
-## Customization
-
-Edit `gradle.properties` to customize:
-- `mod_version` - Version of your mod
-- `maven_group` - Package group (e.g., `com.yourname`)
-- `archives_base_name` - JAR filename base
-
-Edit `src/main/resources/fabric.mod.json` to customize:
-- `name` - Display name of your mod
-- `description` - Mod description
-- `authors` - Your name
-- `license` - License type
-- `contact` - Links and contact info
 
 ## Mod Details
 
