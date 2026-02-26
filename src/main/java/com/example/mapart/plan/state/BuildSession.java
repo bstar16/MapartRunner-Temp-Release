@@ -3,11 +3,14 @@ package com.example.mapart.plan.state;
 import com.example.mapart.plan.BuildPlan;
 import net.minecraft.util.math.BlockPos;
 
+import java.util.Collections;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
 public class BuildSession {
+    private static final Map<BuildPlanState, Set<BuildPlanState>> TRANSITIONS = createTransitions();
     private static final Map<BuildPlanState, Set<BuildPlanState>> TRANSITIONS = Map.of(
             BuildPlanState.IDLE, EnumSet.of(BuildPlanState.LOADED),
             BuildPlanState.LOADED, EnumSet.of(BuildPlanState.BUILDING, BuildPlanState.ERROR),
@@ -60,5 +63,25 @@ public class BuildSession {
             throw new IllegalStateException("Invalid transition: " + state + " -> " + nextState);
         }
         this.state = nextState;
+    }
+
+    private static Map<BuildPlanState, Set<BuildPlanState>> createTransitions() {
+        EnumMap<BuildPlanState, Set<BuildPlanState>> transitions = new EnumMap<>(BuildPlanState.class);
+        transitions.put(BuildPlanState.IDLE, EnumSet.of(BuildPlanState.LOADED));
+        transitions.put(BuildPlanState.LOADED, EnumSet.of(BuildPlanState.BUILDING, BuildPlanState.ERROR));
+        transitions.put(BuildPlanState.BUILDING, EnumSet.of(
+                BuildPlanState.PAUSED,
+                BuildPlanState.COMPLETED,
+                BuildPlanState.ERROR,
+                BuildPlanState.LOADED
+        ));
+        transitions.put(BuildPlanState.PAUSED, EnumSet.of(
+                BuildPlanState.BUILDING,
+                BuildPlanState.ERROR,
+                BuildPlanState.LOADED
+        ));
+        transitions.put(BuildPlanState.ERROR, EnumSet.of(BuildPlanState.LOADED));
+        transitions.put(BuildPlanState.COMPLETED, EnumSet.of(BuildPlanState.BUILDING, BuildPlanState.LOADED));
+        return Collections.unmodifiableMap(transitions);
     }
 }
