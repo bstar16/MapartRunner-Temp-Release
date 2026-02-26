@@ -1,9 +1,12 @@
 plugins {
-	id 'fabric-loom' version '1.9.+'
-	id 'maven-publish'
+    id 'fabric-loom' version '1.9.+'
+    id 'maven-publish'
 }
 
-archivesBaseName = project.archives_base_name
+base {
+    archivesName = project.archives_base_name
+}
+
 version = project.mod_version
 group = project.maven_group
 
@@ -50,12 +53,10 @@ java {
 }
 
 jar {
-	from("LICENSE") {
-		rename { fileName -> "${fileName}_${archivesBaseName}" }
-		rename "LICENSE", "LICENSE_${project.archivesBaseName}"
-	}
+    from("LICENSE") {
+        rename { fileName -> "${fileName}_${base.archivesName.get()}" }
+    }
 }
-
 // configure the maven publication
 publishing {
 	publications {
