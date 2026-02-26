@@ -17,7 +17,6 @@ import java.util.Map;
 public final class MapArtCommand {
     private MapArtCommand() {
     }
-
     public static LiteralArgumentBuilder<ServerCommandSource> create(BuildPlanService planService) {
         return CommandManager.literal("mapart")
                 .then(CommandManager.literal("load")
