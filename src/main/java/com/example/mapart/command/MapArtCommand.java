@@ -157,7 +157,25 @@ public final class MapArtCommand {
                                             + " at " + result.targetPos().toShortString()
                             ), false);
                             return 1;
-                        }));
+                        }))
+                .then(CommandManager.literal("debug")
+                        .requires(source -> source.hasPermissionLevel(2))
+                        .then(CommandManager.literal("secondlast")
+                                .executes(context -> {
+                                    Optional<String> error = planService.coordinator().debugSkipToSecondLastPlacement();
+                                    if (error.isPresent()) {
+                                        context.getSource().sendError(Text.literal(error.get()));
+                                        return 0;
+                                    }
+
+                                    context.getSource().sendFeedback(
+                                            () -> Text.literal("Debug: moved progress to the second last placement. Use /"
+                                                    + commandName + " next to continue."),
+                                            false
+                                    );
+                                    return 1;
+                                }))
+                        );
     }
 
     private static int showPlanInfo(BuildPlanService planService, String commandName, ServerCommandSource source) {

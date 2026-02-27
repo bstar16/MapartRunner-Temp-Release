@@ -137,6 +137,23 @@ public class    BuildCoordinator {
         }
     }
 
+    public Optional<String> debugSkipToSecondLastPlacement() {
+        if (session == null) {
+            return Optional.of("No build plan loaded.");
+        }
+
+        BuildPlan plan = session.getPlan();
+        if (plan.placements().size() < 2) {
+            return Optional.of("Plan must contain at least 2 placements to skip to the second last.");
+        }
+
+        BuildProgress progress = session.getProgress();
+        progress.setCurrentPlacementIndex(plan.placements().size() - 2);
+        updateRegionIndex(progress, plan.regions());
+        progressStore.saveProgress(session);
+        return Optional.empty();
+    }
+
     public StepResult next(ServerCommandSource source) {
         ValidationResult validation = validateForNext(source);
         if (!validation.valid()) {
