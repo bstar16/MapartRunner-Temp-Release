@@ -10,8 +10,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class BuildSession {
-    // Transition rules are centralized in createTransitions() to avoid duplicate-key and redeclaration regressions.
-    private static final Map<BuildPlanState, Set<BuildPlanState>> VALID_TRANSITIONS_BY_STATE = createTransitions();
+    // Keep a single TRANSITIONS declaration. A prior duplicate Map.of(...) initializer
+    // caused both compile-time redeclaration errors and runtime duplicate-key crashes.
+    private static final Map<BuildPlanState, Set<BuildPlanState>> TRANSITIONS = createTransitions();
 
     private final BuildPlan plan;
     private final BuildProgress progress;
