@@ -133,9 +133,9 @@ public final class MapArtCommand {
                             return 1;
                         }))
                 .then(ClientCommandManager.literal("pause")
-                        .executes(context -> pauseBuild(context.getSource(), planService, baritoneFacade)))
+                        .executes(context -> pauseBuild(context.getSource(), planService)))
                 .then(ClientCommandManager.literal("resume")
-                        .executes(context -> resumeBuild(context.getSource(), planService, baritoneFacade)))
+                        .executes(context -> resumeBuild(context.getSource(), planService)))
                 .then(ClientCommandManager.literal("stop")
                         .executes(context -> {
                             Optional<String> error = planService.coordinator().stop();
@@ -223,16 +223,10 @@ public final class MapArtCommand {
     }
 
 
-    private static int pauseBuild(FabricClientCommandSource source, BuildPlanService planService, BaritoneFacade baritoneFacade) {
+    private static int pauseBuild(FabricClientCommandSource source, BuildPlanService planService) {
         Optional<String> error = planService.coordinator().pause();
         if (error.isPresent()) {
             source.sendError(Text.literal(error.get()));
-            return 0;
-        }
-
-        BaritoneFacade.CommandResult result = baritoneFacade.pause();
-        if (!result.success()) {
-            source.sendError(Text.literal("Build session paused, but failed to pause Baritone: " + result.message()));
             return 0;
         }
 
@@ -240,18 +234,11 @@ public final class MapArtCommand {
         return 1;
     }
 
-    private static int resumeBuild(FabricClientCommandSource source, BuildPlanService planService, BaritoneFacade baritoneFacade) {
+    private static int resumeBuild(FabricClientCommandSource source, BuildPlanService planService) {
         Optional<String> error = planService.coordinator().resume();
         if (error.isPresent()) {
             source.sendError(Text.literal(error.get()));
             return 0;
-        }
-
-        BaritoneFacade.CommandResult result = baritoneFacade.resume();
-        if (!result.success()) {
-            source.sendFeedback(Text.literal("Build session resumed."));
-            source.sendError(Text.literal("Baritone was not resumed: " + result.message()));
-            return 1;
         }
 
         source.sendFeedback(Text.literal("Build session resumed."));
