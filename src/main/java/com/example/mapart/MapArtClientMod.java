@@ -19,6 +19,7 @@ import com.example.mapart.supply.SupplyInteractionTracker;
 import com.example.mapart.supply.SupplyStore;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 
@@ -35,7 +36,7 @@ public class MapArtClientMod implements ClientModInitializer {
         SupplyInteractionTracker supplyInteractionTracker = new SupplyInteractionTracker(supplyStore);
         supplyInteractionTracker.registerCallbacks();
         BaritoneFacade baritoneFacade = BaritoneFacadeFactory.create();
-        BuildCoordinator buildCoordinator = new BuildCoordinator(new WorldPlacementResolver(), configStore, progressStore);
+        BuildCoordinator buildCoordinator = new BuildCoordinator(new WorldPlacementResolver(), configStore, progressStore, baritoneFacade);
         BuildPlanService buildPlanService = new BuildPlanService(loaderRegistry, buildCoordinator);
         MapArtRuntime.initialize(buildPlanService, configStore, progressStore, settingsStore, supplyStore, baritoneFacade);
 
@@ -43,6 +44,23 @@ public class MapArtClientMod implements ClientModInitializer {
             dispatcher.register(MapArtCommand.create(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
             dispatcher.register(MapArtCommand.createAlias(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
             dispatcher.register(MapArtCommand.createRunnerAlias(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
+        });
+
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            BuildCoordinator.AssistedStepResult assistedStep = buildCoordinator.tickAssisted(client);
+            if (!assistedStep.didWork() || client.player == null || assistedStep.message().isBlank()) {
+                return;
+            }
+
+            if (assistedStep.failed()) {
+                client.player.sendMessage(net.minecraft.text.Text.literal("[MapArt] " + assistedStep.message()), false);
+                return;
+            }
+
+            if (assistedStep.done()) {
+                client.player.sendMessage(net.minecraft.text.Text.literal("[MapArt] " + assistedStep.message()), false);
+            }
         });
 
         PlacementStatusResolver resolver = new PlacementStatusResolver();

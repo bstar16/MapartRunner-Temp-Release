@@ -1,5 +1,6 @@
 package com.example.mapart.plan.state;
 
+import com.example.mapart.baritone.BaritoneFacade;
 import com.example.mapart.persistence.ConfigStore;
 import com.example.mapart.persistence.ProgressStore;
 import com.example.mapart.plan.BuildPlan;
@@ -14,15 +15,26 @@ import java.util.List;
 import java.util.Optional;
 
 public class BuildCoordinator {
+    private static final int TARGET_APPROACH_RANGE = 3;
+
     private final WorldPlacementResolver placementResolver;
     private final ConfigStore configStore;
     private final ProgressStore progressStore;
+    private final BaritoneFacade baritoneFacade;
     private BuildSession session;
+    private BlockPos activeMovementTarget;
+    private boolean movementPaused;
 
-    public BuildCoordinator(WorldPlacementResolver placementResolver, ConfigStore configStore, ProgressStore progressStore) {
+    public BuildCoordinator(
+            WorldPlacementResolver placementResolver,
+            ConfigStore configStore,
+            ProgressStore progressStore,
+            BaritoneFacade baritoneFacade
+    ) {
         this.placementResolver = placementResolver;
         this.configStore = configStore;
         this.progressStore = progressStore;
+        this.baritoneFacade = baritoneFacade;
     }
 
     public BuildSession loadPlan(BuildPlan plan) {
@@ -51,6 +63,7 @@ public class BuildCoordinator {
             return false;
         }
 
+        cancelActiveMovement();
         session = null;
         progressStore.clearProgress();
         configStore.clearRememberedState();
@@ -88,7 +101,22 @@ public class BuildCoordinator {
             return Optional.of("No build session.");
         }
 
-        return transitionSession(BuildPlanState.PAUSED, "Can only pause while BUILDING.");
+        Optional<String> sessionTransitionError = transitionSession(BuildPlanState.PAUSED, "Can only pause while BUILDING.");
+        if (sessionTransitionError.isPresent()) {
+            return sessionTransitionError;
+        }
+
+        if (activeMovementTarget == null) {
+            return Optional.empty();
+        }
+
+        BaritoneFacade.CommandResult result = baritoneFacade.pause();
+        if (!result.success()) {
+            return Optional.of("Build session paused, but failed to pause Baritone: " + result.message());
+        }
+
+        movementPaused = true;
+        return Optional.empty();
     }
 
     public Optional<String> stop() {
@@ -96,6 +124,7 @@ public class BuildCoordinator {
             return Optional.of("No build session.");
         }
 
+        cancelActiveMovement();
         session.getProgress().reset();
         if (session.getState() == BuildPlanState.LOADED) {
             progressStore.saveProgress(session);
@@ -110,7 +139,54 @@ public class BuildCoordinator {
             return Optional.of("No build session.");
         }
 
-        return transitionSession(BuildPlanState.BUILDING, "Can only resume while PAUSED.");
+        Optional<String> sessionTransitionError = transitionSession(BuildPlanState.BUILDING, "Can only resume while PAUSED.");
+        if (sessionTransitionError.isPresent()) {
+            return sessionTransitionError;
+        }
+
+        if (!movementPaused) {
+            return Optional.empty();
+        }
+
+        BaritoneFacade.CommandResult result = baritoneFacade.resume();
+        if (!result.success()) {
+            movementPaused = false;
+            activeMovementTarget = null;
+            return Optional.of("Build session resumed, but Baritone movement could not resume: " + result.message());
+        }
+
+        movementPaused = false;
+        return Optional.empty();
+    }
+
+    public AssistedStepResult tickAssisted(MinecraftClient client) {
+        ValidationResult validation = validateForNext(client);
+        if (!validation.valid()) {
+            return AssistedStepResult.noop();
+        }
+
+        if (activeMovementTarget != null) {
+            return monitorActiveMovement(client);
+        }
+
+        StepResult stepResult = computeNextStep(client, false);
+        if (!stepResult.actionable() && !stepResult.done()) {
+            return pauseForRecoverableFailure(stepResult.message());
+        }
+        if (stepResult.done()) {
+            cancelActiveMovement();
+            return AssistedStepResult.completed(stepResult.message());
+        }
+
+        BaritoneFacade.CommandResult movementRequest = baritoneFacade.goNear(stepResult.targetPos(), TARGET_APPROACH_RANGE);
+        if (!movementRequest.success()) {
+            return pauseForRecoverableFailure("Failed to start movement to "
+                    + stepResult.targetPos().toShortString() + ": " + movementRequest.message());
+        }
+
+        activeMovementTarget = stepResult.targetPos().toImmutable();
+        movementPaused = false;
+        return AssistedStepResult.moving("Moving near " + activeMovementTarget.toShortString() + ".");
     }
 
     public Optional<String> debugSkipToSecondLastPlacement() {
@@ -130,16 +206,26 @@ public class BuildCoordinator {
     }
 
     public StepResult next(MinecraftClient client) {
+        return computeNextStep(client, true);
+    }
+
+    private StepResult computeNextStep(MinecraftClient client, boolean advanceOnActionable) {
         ValidationResult validation = validateForNext(client);
         if (!validation.valid()) {
             return StepResult.error(validation.message());
+        }
+        if (activeMovementTarget != null) {
+            return StepResult.error("Movement is already active toward " + activeMovementTarget.toShortString() + ".");
         }
 
         BuildPlan plan = session.getPlan();
         List<Placement> placements = plan.placements();
 
-        while (session.getCurrentPlacementIndex() < placements.size()) {
-            Placement placement = placements.get(session.getCurrentPlacementIndex());
+        int placementIndex = session.getCurrentPlacementIndex();
+        int completedPlacements = 0;
+
+        while (placementIndex < placements.size()) {
+            Placement placement = placements.get(placementIndex);
             Optional<BlockPos> targetPos = placementResolver.resolveAbsolute(session, placement);
             if (targetPos.isEmpty()) {
                 markSessionError();
@@ -153,23 +239,42 @@ public class BuildCoordinator {
             }
 
             BlockState currentState = world.getBlockState(absolute);
-            session.incrementCompletedPlacements();
-            session.setCurrentPlacementIndex(session.getCurrentPlacementIndex() + 1);
-            updateRegionIndex(session.getProgress(), plan.regions());
-
             if (currentState.isOf(placement.block())) {
+                completedPlacements++;
+                placementIndex++;
                 continue;
             }
 
-            progressStore.saveProgress(session);
+            if (advanceOnActionable) {
+                completedPlacements++;
+                placementIndex++;
+            }
+
+            applyProgressAdvance(plan, placementIndex, completedPlacements);
+
             return StepResult.actionable(placement, absolute);
         }
+
+        applyProgressAdvance(plan, placementIndex, completedPlacements);
 
         if (transitionToCompleted()) {
             return StepResult.completed();
         }
 
         return StepResult.error("Failed to transition session to COMPLETED state.");
+    }
+
+    private void applyProgressAdvance(BuildPlan plan, int placementIndex, int completedPlacements) {
+        if (completedPlacements <= 0 && placementIndex == session.getCurrentPlacementIndex()) {
+            return;
+        }
+
+        session.setCurrentPlacementIndex(placementIndex);
+        for (int i = 0; i < completedPlacements; i++) {
+            session.incrementCompletedPlacements();
+        }
+        updateRegionIndex(session.getProgress(), plan.regions());
+        progressStore.saveProgress(session);
     }
 
     public Optional<SessionStatus> sessionStatus() {
@@ -251,6 +356,60 @@ public class BuildCoordinator {
         }
 
         return ValidationResult.success();
+    }
+
+    private AssistedStepResult monitorActiveMovement(MinecraftClient client) {
+        if (session == null || session.getState() != BuildPlanState.BUILDING || client.player == null) {
+            return AssistedStepResult.noop();
+        }
+
+        BlockPos playerPos = client.player.getBlockPos();
+        if (isWithinRange(playerPos, activeMovementTarget, TARGET_APPROACH_RANGE)) {
+            if (baritoneFacade.isBusy()) {
+                baritoneFacade.cancel();
+            }
+
+            activeMovementTarget = null;
+            movementPaused = false;
+            return AssistedStepResult.arrived("Reached target area.");
+        }
+
+        if (movementPaused) {
+            return AssistedStepResult.noop();
+        }
+
+        if (!baritoneFacade.isBusy()) {
+            String message = "Movement ended before reaching " + activeMovementTarget.toShortString() + ". Run /mapart resume to retry.";
+            activeMovementTarget = null;
+            return pauseForRecoverableFailure(message);
+        }
+
+        return AssistedStepResult.noop();
+    }
+
+
+    private AssistedStepResult pauseForRecoverableFailure(String message) {
+        if (session != null && session.getState() == BuildPlanState.BUILDING) {
+            transitionSession(BuildPlanState.PAUSED, "Can only pause while BUILDING.");
+        }
+
+        movementPaused = false;
+        return AssistedStepResult.failure(message, false);
+    }
+
+    private boolean isWithinRange(BlockPos playerPos, BlockPos target, int range) {
+        return Math.abs(playerPos.getX() - target.getX()) <= range
+                && Math.abs(playerPos.getY() - target.getY()) <= range
+                && Math.abs(playerPos.getZ() - target.getZ()) <= range;
+    }
+
+    private void cancelActiveMovement() {
+        if (activeMovementTarget != null || movementPaused || baritoneFacade.isBusy()) {
+            baritoneFacade.cancel();
+        }
+
+        activeMovementTarget = null;
+        movementPaused = false;
     }
 
     private Optional<NextTarget> resolveNextTarget(BuildSession activeSession) {
@@ -355,6 +514,34 @@ public class BuildCoordinator {
 
         static StepResult completed() {
             return new StepResult(true, false, "Build plan complete.", null, null);
+        }
+    }
+
+    public record AssistedStepResult(
+            boolean didWork,
+            boolean done,
+            boolean failed,
+            boolean unrecoverable,
+            String message
+    ) {
+        static AssistedStepResult noop() {
+            return new AssistedStepResult(false, false, false, false, "");
+        }
+
+        static AssistedStepResult moving(String message) {
+            return new AssistedStepResult(true, false, false, false, message);
+        }
+
+        static AssistedStepResult arrived(String message) {
+            return new AssistedStepResult(true, false, false, false, message);
+        }
+
+        static AssistedStepResult completed(String message) {
+            return new AssistedStepResult(true, true, false, false, message);
+        }
+
+        static AssistedStepResult failure(String message, boolean unrecoverable) {
+            return new AssistedStepResult(true, false, true, unrecoverable, message);
         }
     }
 }
