@@ -1,5 +1,6 @@
 package com.example.mapart.plan.state;
 
+import com.example.mapart.baritone.NoOpBaritoneFacade;
 import com.example.mapart.persistence.ConfigStore;
 import com.example.mapart.persistence.ProgressStore;
 import com.example.mapart.plan.BuildPlan;
@@ -114,7 +115,8 @@ class MilestoneATest {
         BuildCoordinator coordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
                 new ConfigStore(tempDir.resolve("config.json")),
-                new ProgressStore(tempDir.resolve("progress.json"))
+                new ProgressStore(tempDir.resolve("progress.json")),
+                new NoOpBaritoneFacade()
         );
         return new BuildPlanService(registry, coordinator);
     }
