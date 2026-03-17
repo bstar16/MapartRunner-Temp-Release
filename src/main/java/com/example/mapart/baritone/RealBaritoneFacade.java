@@ -3,6 +3,7 @@ package com.example.mapart.baritone;
 import net.minecraft.util.math.BlockPos;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 
@@ -117,8 +118,53 @@ public class RealBaritoneFacade implements BaritoneFacade {
 
     private Object createGoalNear(BlockPos target, int range) throws ReflectiveOperationException {
         Class<?> goalNearClass = Class.forName(GOAL_NEAR);
-        Constructor<?> constructor = goalNearClass.getConstructor(int.class, int.class, int.class, int.class);
-        return constructor.newInstance(target.getX(), target.getY(), target.getZ(), range);
+        ReflectiveOperationException failure = null;
+
+        for (Constructor<?> constructor : goalNearClass.getConstructors()) {
+            Class<?>[] parameterTypes = constructor.getParameterTypes();
+            try {
+                if (parameterTypes.length == 4
+                        && parameterTypes[0] == int.class
+                        && parameterTypes[1] == int.class
+                        && parameterTypes[2] == int.class) {
+                    Object radiusValue = convertRangeValue(parameterTypes[3], range);
+                    if (radiusValue != null) {
+                        return constructor.newInstance(target.getX(), target.getY(), target.getZ(), radiusValue);
+                    }
+                }
+
+                if (parameterTypes.length == 3
+                        && parameterTypes[0] == int.class
+                        && parameterTypes[1] == int.class
+                        && parameterTypes[2] == int.class) {
+                    return constructor.newInstance(target.getX(), target.getY(), target.getZ());
+                }
+            } catch (InstantiationException | IllegalAccessException | InvocationTargetException exception) {
+                failure = exception;
+            }
+        }
+
+        if (failure != null) {
+            throw failure;
+        }
+
+        throw new NoSuchMethodException("No compatible GoalNear constructor found");
+    }
+
+    private Object convertRangeValue(Class<?> parameterType, int range) {
+        if (parameterType == int.class) {
+            return range;
+        }
+        if (parameterType == double.class) {
+            return (double) range;
+        }
+        if (parameterType == float.class) {
+            return (float) range;
+        }
+        if (parameterType == long.class) {
+            return (long) range;
+        }
+        return null;
     }
 
     private Object getPrimaryBaritone() throws ReflectiveOperationException {
