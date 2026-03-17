@@ -1,5 +1,6 @@
 package com.example.mapart.plan.state;
 
+import com.example.mapart.baritone.NoOpBaritoneFacade;
 import com.example.mapart.persistence.ConfigStore;
 import com.example.mapart.persistence.ProgressStore;
 import com.example.mapart.plan.BuildPlan;
@@ -51,7 +52,8 @@ class BuildSessionStateTest {
         BuildCoordinator coordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
                 new ConfigStore(tempDir.resolve("config.json")),
-                new ProgressStore(tempDir.resolve("progress.json"))
+                new ProgressStore(tempDir.resolve("progress.json")),
+                new NoOpBaritoneFacade()
         );
 
         coordinator.loadPlan(plan(tempDir.resolve("three.nbt")));
@@ -76,7 +78,8 @@ class BuildSessionStateTest {
         BuildCoordinator firstCoordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
                 new ConfigStore(configPath),
-                new ProgressStore(progressPath)
+                new ProgressStore(progressPath),
+                new NoOpBaritoneFacade()
         );
 
         BuildSession firstSession = firstCoordinator.loadPlan(plan);
@@ -90,7 +93,8 @@ class BuildSessionStateTest {
         BuildCoordinator restoredCoordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
                 new ConfigStore(configPath),
-                new ProgressStore(progressPath)
+                new ProgressStore(progressPath),
+                new NoOpBaritoneFacade()
         );
         BuildSession restoredSession = restoredCoordinator.loadPlan(plan);
 
@@ -106,7 +110,8 @@ class BuildSessionStateTest {
         BuildCoordinator coordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
                 new ConfigStore(tempDir.resolve("config2.json")),
-                new ProgressStore(tempDir.resolve("progress2.json"))
+                new ProgressStore(tempDir.resolve("progress2.json")),
+                new NoOpBaritoneFacade()
         );
 
         assertTrue(coordinator.setOrigin(BlockPos.ORIGIN).isPresent());
