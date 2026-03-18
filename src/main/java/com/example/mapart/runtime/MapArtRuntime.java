@@ -14,6 +14,7 @@ public final class MapArtRuntime {
     private static MapartSettingsStore settingsStore;
     private static SupplyStore supplyStore;
     private static BaritoneFacade baritoneFacade;
+    private static DebugReporter debugReporter;
 
     private MapArtRuntime() {
     }
@@ -24,7 +25,8 @@ public final class MapArtRuntime {
             ProgressStore progress,
             MapartSettingsStore settings,
             SupplyStore supplies,
-            BaritoneFacade facade
+            BaritoneFacade facade,
+            DebugReporter reporter
     ) {
         buildPlanService = planService;
         configStore = config;
@@ -32,6 +34,7 @@ public final class MapArtRuntime {
         settingsStore = settings;
         supplyStore = supplies;
         baritoneFacade = facade;
+        debugReporter = reporter;
     }
 
     public static BuildPlanService buildPlanService() {
@@ -48,5 +51,9 @@ public final class MapArtRuntime {
 
     public static BaritoneFacade baritoneFacade() {
         return baritoneFacade;
+    }
+
+    public static DebugReporter debugReporter() {
+        return debugReporter;
     }
 }
