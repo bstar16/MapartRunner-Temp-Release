@@ -102,23 +102,19 @@ public final class MapArtCommand {
                 .then(ClientCommandManager.literal("info")
                         .executes(context -> showPlanInfo(planService, commandName, context.getSource())))
                 .then(ClientCommandManager.literal("setorigin")
-                        .executes(context -> {
-                            Optional<BuildSession> session = planService.currentSession();
-                            if (session.isEmpty()) {
-                                context.getSource().sendError(Text.literal("No build plan loaded. Use /" + commandName + " load <path> first."));
-                                return 0;
-                            }
-
-                            BlockPos playerPos = BlockPos.ofFloored(context.getSource().getPosition());
-                            Optional<String> error = planService.coordinator().setOrigin(playerPos);
-                            if (error.isPresent()) {
-                                context.getSource().sendError(Text.literal(error.get()));
-                                return 0;
-                            }
-
-                            context.getSource().sendFeedback(Text.literal("Origin set to " + playerPos.toShortString()));
-                            return 1;
-                        }))
+                        .executes(context -> setOrigin(commandName, planService, context.getSource(), null))
+                        .then(ClientCommandManager.argument("x", IntegerArgumentType.integer())
+                                .then(ClientCommandManager.argument("y", IntegerArgumentType.integer())
+                                        .then(ClientCommandManager.argument("z", IntegerArgumentType.integer())
+                                                .executes(context -> setOrigin(
+                                                        commandName,
+                                                        planService,
+                                                        context.getSource(),
+                                                        new BlockPos(
+                                                                IntegerArgumentType.getInteger(context, "x"),
+                                                                IntegerArgumentType.getInteger(context, "y"),
+                                                                IntegerArgumentType.getInteger(context, "z")
+                                                        )))))))
                 .then(ClientCommandManager.literal("status")
                         .executes(context -> showStatus(planService, context.getSource())))
                 .then(ClientCommandManager.literal("start")
@@ -269,6 +265,29 @@ public final class MapArtCommand {
 
     private static int debugBusy(FabricClientCommandSource source, BaritoneFacade baritoneFacade) {
         source.sendFeedback(Text.literal("Baritone busy: " + (baritoneFacade.isBusy() ? "yes" : "no")));
+        return 1;
+    }
+
+    private static int setOrigin(
+            String commandName,
+            BuildPlanService planService,
+            FabricClientCommandSource source,
+            BlockPos requestedOrigin
+    ) {
+        Optional<BuildSession> session = planService.currentSession();
+        if (session.isEmpty()) {
+            source.sendError(Text.literal("No build plan loaded. Use /" + commandName + " load <path> first."));
+            return 0;
+        }
+
+        BlockPos origin = requestedOrigin == null ? BlockPos.ofFloored(source.getPosition()) : requestedOrigin;
+        Optional<String> error = planService.coordinator().setOrigin(origin);
+        if (error.isPresent()) {
+            source.sendError(Text.literal(error.get()));
+            return 0;
+        }
+
+        source.sendFeedback(Text.literal("Origin set to " + origin.toShortString()));
         return 1;
     }
 
