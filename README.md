@@ -1,6 +1,6 @@
-# MapArt - Fabric 1.21.1 Mod
+# MapArt - Fabric 1.21.4 Mod
 
-A Minecraft Fabric mod for Minecraft 1.21.1.
+A Minecraft Fabric mod for Minecraft 1.21.4
 
 ## Development Setup
 
@@ -89,7 +89,7 @@ Available subcommands:
 
 Example:
 ```mcfunction
-/mapart load /absolute/path/to/build.schem
+/mapart load /absolute/path/to/build.schem or .nbt
 /mapart info
 /mapart unload
 ```
@@ -106,7 +106,6 @@ MapArtRunner integrates with Baritone through `baritone-api-fabric` at runtime.
 
 - Install a Baritone jar that exposes the `baritone-api-fabric` API for your exact Minecraft version (1.21.4 in this project).
 - If Baritone is missing or the API is mismatched, `/mapart start` now reports a friendly in-game error and assisted movement is disabled until a compatible Baritone jar is installed.
-- Goal creation prefers `GoalNear(BlockPos, int)` and falls back to other compatible constructors when needed.
 
 ## Troubleshooting
 
@@ -136,7 +135,7 @@ If the standard commands fail even when typed correctly, check the items below.
 
 ## Mod Details
 
-- **Minecraft Version:** 1.21.1
+- **Minecraft Version:** 1.21.4
 - **Fabric Loader:** 0.16.5
 - **Fabric API:** 0.104.0+1.21.1
 - **Java Version:** 21
