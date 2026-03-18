@@ -1,6 +1,7 @@
 package com.example.mapart.persistence;
 
 import com.example.mapart.settings.MapartSettingsStore;
+import com.example.mapart.supply.SupplyPoint;
 import com.example.mapart.supply.SupplyStore;
 import net.minecraft.util.math.BlockPos;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -69,4 +71,19 @@ class SettingsAndSupplyStoreTest {
 
         assertEquals("near", selected.name());
     }
+    @Test
+    void supplyStoreListsAllSuppliesInDimensionByDistance() {
+        Path suppliesPath = tempDir.resolve("supplies-ordered.json");
+        SupplyStore store = new SupplyStore(suppliesPath);
+        store.add(new BlockPos(20, 64, 20), "minecraft:overworld", "third");
+        store.add(new BlockPos(5, 64, 5), "minecraft:overworld", "first");
+        store.add(new BlockPos(10, 64, 10), "minecraft:overworld", "second");
+        store.add(new BlockPos(1, 64, 1), "minecraft:the_nether", "ignored");
+
+        var ordered = store.listInDimensionByDistance("minecraft:overworld", new BlockPos(0, 64, 0));
+
+        assertEquals(3, ordered.size());
+        assertEquals(List.of("first", "second", "third"), ordered.stream().map(SupplyPoint::name).toList());
+    }
+
 }

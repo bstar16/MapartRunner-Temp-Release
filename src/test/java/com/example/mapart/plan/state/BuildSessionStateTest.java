@@ -123,6 +123,13 @@ class BuildSessionStateTest {
 
 
     @Test
+    void refillPlanningLooksAheadAtMostMainInventoryCapacity() {
+        assertEquals(2304, BuildCoordinator.computeRefillLookaheadEndIndex(0, 5000));
+        assertEquals(2804, BuildCoordinator.computeRefillLookaheadEndIndex(500, 5000));
+        assertEquals(5000, BuildCoordinator.computeRefillLookaheadEndIndex(4800, 5000));
+    }
+
+    @Test
     void setOriginPersistsExplicitCoordinates() {
         BuildCoordinator coordinator = new BuildCoordinator(
                 new WorldPlacementResolver(),
@@ -152,6 +159,7 @@ class BuildSessionStateTest {
 
         assertTrue(coordinator.setOrigin(BlockPos.ORIGIN).isPresent());
     }
+
 
     private static BuildPlan plan(Path sourcePath) {
         Block block = allocateBlock();
