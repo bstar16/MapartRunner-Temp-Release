@@ -846,18 +846,18 @@ public class BuildCoordinator {
     }
 
     private AssistedStepResult failRefill(String message) {
-        closeHandledScreen(MinecraftClient.getInstance());
+        MinecraftClient client = MinecraftClient.getInstance();
+        closeHandledScreen(client);
         resetRefillInteractionState();
         Map<Identifier, Integer> remaining = session == null || session.getRefillStatus() == null
                 ? Map.of()
-                : computeRemainingDeficits(MinecraftClient.getInstance().player, session.getRefillStatus().missingMaterials());
+                : computeRemainingDeficits(client.player, session.getRefillStatus().missingMaterials());
         if (session != null && session.getRefillStatus() != null) {
             RefillStatus current = session.getRefillStatus();
             session.setRefillStatus(new RefillStatus(current.supplyPoint(), remaining, true));
-            transitionSession(BuildPlanState.NEED_REFILL, "Cannot switch to NEED_REFILL.");
             progressStore.saveProgress(session);
         }
-        return AssistedStepResult.failure(message, false);
+        return pauseForRecoverableFailure(message);
     }
 
     private HandledScreen<?> currentSupplyScreen(MinecraftClient client) {
