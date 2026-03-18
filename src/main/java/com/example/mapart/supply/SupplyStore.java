@@ -52,13 +52,18 @@ public class SupplyStore {
     }
 
     public synchronized Optional<SupplyPoint> findNearestInDimension(String dimensionKey, BlockPos origin) {
+        return listInDimensionByDistance(dimensionKey, origin).stream().findFirst();
+    }
+
+    public synchronized List<SupplyPoint> listInDimensionByDistance(String dimensionKey, BlockPos origin) {
         if (dimensionKey == null || origin == null) {
-            return Optional.empty();
+            return List.of();
         }
 
         return supplies.stream()
                 .filter(point -> dimensionKey.equals(point.dimensionKey()))
-                .min(Comparator.comparingDouble(point -> squaredDistance(origin, point.pos())));
+                .sorted(Comparator.comparingDouble(point -> squaredDistance(origin, point.pos())))
+                .toList();
     }
 
     public synchronized int clear() {

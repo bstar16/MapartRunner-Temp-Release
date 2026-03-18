@@ -11,6 +11,7 @@ import com.example.mapart.supply.SupplyStore;
 import com.example.mapart.util.MaterialCountFormatter;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.client.world.ClientWorld;
@@ -43,6 +44,7 @@ public class BuildCoordinator {
     private static final int TARGET_APPROACH_RANGE = 3;
     private static final int REFILL_ACTION_DELAY_TICKS = 4;
     private static final int MAX_SUPPLY_SCREEN_WAIT_POLLS = 5;
+    private static final int MAX_REFILL_LOOKAHEAD_ITEMS = PlayerInventory.MAIN_SIZE * 64;
 
     private final WorldPlacementResolver placementResolver;
     private final ConfigStore configStore;
@@ -350,7 +352,7 @@ public class BuildCoordinator {
         }
 
         Region region = regions.get(regionIndex);
-        Map<Identifier, Integer> required = computeRequiredMaterialsForCurrentRegion();
+        Map<Identifier, Integer> required = computeRequiredMaterialsForRefillWindow();
         if (required.isEmpty()) {
             session.setRefillStatus(null);
             return Optional.empty();
@@ -371,10 +373,11 @@ public class BuildCoordinator {
         }
 
         String dimensionKey = client.world.getRegistryKey().getValue().toString();
-        SupplyPoint supplyPoint = supplyStore.findNearestInDimension(dimensionKey, client.player.getBlockPos()).orElse(null);
-        session.setRefillStatus(new RefillStatus(supplyPoint, missing, false));
+        List<SupplyPoint> supplyPoints = supplyStore.listInDimensionByDistance(dimensionKey, client.player.getBlockPos());
+        SupplyPoint supplyPoint = supplyPoints.isEmpty() ? null : supplyPoints.getFirst();
+        session.setRefillStatus(new RefillStatus(supplyPoint, supplyPoints, 0, missing, false));
         progressStore.saveProgress(session);
-        return Optional.of(new RefillCheck(region, missing, supplyPoint));
+        return Optional.of(new RefillCheck(region, missing, supplyPoints, 0));
     }
 
     private AssistedStepResult beginRefillMovement(RefillCheck refillCheck) {
@@ -426,7 +429,8 @@ public class BuildCoordinator {
                 yield beginRefillMovement(new RefillCheck(
                         session.getPlan().regions().get(session.getCurrentRegionIndex()),
                         refillStatus.missingMaterials(),
-                        refillStatus.supplyPoint()
+                        refillStatus.supplyPoints(),
+                        refillStatus.supplyIndex()
                 ));
             }
             case REFILLING -> performRefill(client, refillStatus);
@@ -438,6 +442,11 @@ public class BuildCoordinator {
     private AssistedStepResult performRefill(MinecraftClient client, RefillStatus refillStatus) {
         if (client.player == null || client.world == null || refillStatus.supplyPoint() == null) {
             return AssistedStepResult.noop();
+        }
+        if (!isUsableContainer(client.world, refillStatus.supplyPoint().pos())) {
+            return advanceToNextSupplyOrPause(client, refillStatus,
+                    "No container is present at registered supply #" + refillStatus.supplyPoint().id()
+                            + " (" + refillStatus.supplyPoint().pos().toShortString() + ").");
         }
         if (!refillStatus.arrivedAtSupply()) {
             return AssistedStepResult.noop();
@@ -462,7 +471,7 @@ public class BuildCoordinator {
                     return AssistedStepResult.noop();
                 }
 
-                return failRefill("Timed out waiting for the supply container at "
+                return advanceToNextSupplyOrPause(client, refillStatus, "Timed out waiting for the supply container at "
                         + refillStatus.supplyPoint().pos().toShortString() + " to open.");
             }
 
@@ -479,7 +488,7 @@ public class BuildCoordinator {
                     )
             );
             if (!interactResult.isAccepted()) {
-                return failRefill("Failed to interact with the supply container at "
+                return advanceToNextSupplyOrPause(client, refillStatus, "Failed to interact with the supply container at "
                         + refillStatus.supplyPoint().pos().toShortString() + ".");
             }
 
@@ -523,7 +532,9 @@ public class BuildCoordinator {
                     + " of " + itemId + " from supply.");
         }
 
-        return failRefill("Supply is missing " + String.join(", ", formatMaterialMap(remaining, 5)) + ".");
+        return advanceToNextSupplyOrPause(client, refillStatus,
+                "Supply #" + refillStatus.supplyPoint().id() + " is missing "
+                        + String.join(", ", formatMaterialMap(remaining, 5)) + ".");
     }
 
     private AssistedStepResult continueReturnToBuild(MinecraftClient client, RefillStatus refillStatus) {
@@ -569,27 +580,21 @@ public class BuildCoordinator {
                 + activeMovementTarget.toShortString() + ".");
     }
 
-    private Map<Identifier, Integer> computeRequiredMaterialsForCurrentRegion() {
+    private Map<Identifier, Integer> computeRequiredMaterialsForRefillWindow() {
         if (session == null) {
             return Map.of();
         }
 
-        List<Region> regions = session.getPlan().regions();
-        int regionIndex = session.getCurrentRegionIndex();
-        if (regionIndex < 0 || regionIndex >= regions.size()) {
-            return Map.of();
-        }
-
-        Region region = regions.get(regionIndex);
-        int regionStartIndex = regionStartIndex(regions, regionIndex);
-        int localStartIndex = Math.max(0, session.getCurrentPlacementIndex() - regionStartIndex);
-        if (localStartIndex >= region.placements().size()) {
+        BuildPlan plan = session.getPlan();
+        int startIndex = session.getCurrentPlacementIndex();
+        if (startIndex < 0 || startIndex >= plan.placements().size()) {
             return Map.of();
         }
 
         Map<Identifier, Integer> required = new LinkedHashMap<>();
-        for (int i = localStartIndex; i < region.placements().size(); i++) {
-            Placement placement = region.placements().get(i);
+        int endIndex = computeRefillLookaheadEndIndex(startIndex, plan.placements().size());
+        for (int i = startIndex; i < endIndex; i++) {
+            Placement placement = plan.placements().get(i);
             Identifier id = Registries.BLOCK.getId(placement.block());
             required.merge(id, 1, Integer::sum);
         }
@@ -602,7 +607,7 @@ public class BuildCoordinator {
         }
 
         Map<Identifier, Integer> inventory = new LinkedHashMap<>();
-        for (int slot = 0; slot < player.getInventory().size(); slot++) {
+        for (int slot = 0; slot < PlayerInventory.MAIN_SIZE; slot++) {
             ItemStack stack = player.getInventory().getStack(slot);
             if (stack.isEmpty()) {
                 continue;
@@ -625,12 +630,44 @@ public class BuildCoordinator {
         return remaining;
     }
 
-    private int regionStartIndex(List<Region> regions, int regionIndex) {
-        int index = 0;
-        for (int i = 0; i < regionIndex; i++) {
-            index += regions.get(i).placements().size();
+    static int computeRefillLookaheadEndIndex(int startIndex, int totalPlacements) {
+        if (startIndex < 0 || totalPlacements < 0 || startIndex >= totalPlacements) {
+            return Math.max(0, Math.min(startIndex, totalPlacements));
         }
-        return index;
+        return Math.min(totalPlacements, startIndex + MAX_REFILL_LOOKAHEAD_ITEMS);
+    }
+
+    private boolean isUsableContainer(ClientWorld world, BlockPos pos) {
+        if (world == null || pos == null) {
+            return false;
+        }
+        BlockEntity blockEntity = world.getBlockEntity(pos);
+        return blockEntity instanceof net.minecraft.inventory.Inventory;
+    }
+
+    private AssistedStepResult advanceToNextSupplyOrPause(MinecraftClient client, RefillStatus refillStatus, String reason) {
+        closeHandledScreen(client);
+        resetRefillInteractionState();
+
+        List<SupplyPoint> supplyPoints = refillStatus.supplyPoints() == null ? List.of() : refillStatus.supplyPoints();
+        for (int nextIndex = refillStatus.supplyIndex() + 1; nextIndex < supplyPoints.size(); nextIndex++) {
+            SupplyPoint nextSupply = supplyPoints.get(nextIndex);
+            if (!isUsableContainer(client.world, nextSupply.pos())) {
+                continue;
+            }
+
+            Map<Identifier, Integer> remaining = computeRemainingDeficits(client.player, refillStatus.missingMaterials());
+            session.setRefillStatus(new RefillStatus(nextSupply, supplyPoints, nextIndex, remaining, false));
+            progressStore.saveProgress(session);
+            return beginRefillMovement(new RefillCheck(
+                    session.getPlan().regions().get(session.getCurrentRegionIndex()),
+                    remaining,
+                    supplyPoints,
+                    nextIndex
+            ));
+        }
+
+        return failRefill(reason + " No registered supply container in this dimension can provide the remaining materials.");
     }
 
     private List<String> formatMaterialMap(Map<Identifier, Integer> counts, int limit) {
@@ -776,7 +813,14 @@ public class BuildCoordinator {
             if (activeMovementPurpose == MovementPurpose.REFILL) {
                 activeMovementPurpose = MovementPurpose.BUILD;
                 if (session.getRefillStatus() != null) {
-                    session.setRefillStatus(new RefillStatus(session.getRefillStatus().supplyPoint(), session.getRefillStatus().missingMaterials(), true));
+                    RefillStatus currentRefill = session.getRefillStatus();
+                    session.setRefillStatus(new RefillStatus(
+                            currentRefill.supplyPoint(),
+                            currentRefill.supplyPoints(),
+                            currentRefill.supplyIndex(),
+                            currentRefill.missingMaterials(),
+                            true
+                    ));
                     progressStore.saveProgress(session);
                 }
                 if (session.getState() == BuildPlanState.NEED_REFILL) {
@@ -836,7 +880,7 @@ public class BuildCoordinator {
 
     private int countPlayerItem(ClientPlayerEntity player, Item item) {
         int total = 0;
-        for (int slot = 0; slot < player.getInventory().size(); slot++) {
+        for (int slot = 0; slot < PlayerInventory.MAIN_SIZE; slot++) {
             ItemStack stack = player.getInventory().getStack(slot);
             if (stack.isOf(item)) {
                 total += stack.getCount();
@@ -854,7 +898,7 @@ public class BuildCoordinator {
                 : computeRemainingDeficits(client.player, session.getRefillStatus().missingMaterials());
         if (session != null && session.getRefillStatus() != null) {
             RefillStatus current = session.getRefillStatus();
-            session.setRefillStatus(new RefillStatus(current.supplyPoint(), remaining, true));
+            session.setRefillStatus(new RefillStatus(current.supplyPoint(), current.supplyPoints(), current.supplyIndex(), remaining, true));
             progressStore.saveProgress(session);
         }
         return pauseForRecoverableFailure(message);
@@ -962,7 +1006,10 @@ public class BuildCoordinator {
         }
     }
 
-    private record RefillCheck(Region region, Map<Identifier, Integer> missingMaterials, SupplyPoint supplyPoint) {
+    private record RefillCheck(Region region, Map<Identifier, Integer> missingMaterials, List<SupplyPoint> supplyPoints, int supplyIndex) {
+        SupplyPoint supplyPoint() {
+            return supplyPoints == null || supplyIndex < 0 || supplyIndex >= supplyPoints.size() ? null : supplyPoints.get(supplyIndex);
+        }
     }
 
     public record NextTarget(Placement placement, BlockPos absolutePos) {
