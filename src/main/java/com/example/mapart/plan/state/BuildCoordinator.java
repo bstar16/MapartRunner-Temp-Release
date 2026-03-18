@@ -2,6 +2,7 @@ package com.example.mapart.plan.state;
 
 import com.example.mapart.baritone.BaritoneFacade;
 import com.example.mapart.persistence.ConfigStore;
+import com.example.mapart.runtime.MapArtRuntime;
 import com.example.mapart.persistence.ProgressStore;
 import com.example.mapart.plan.BuildPlan;
 import com.example.mapart.plan.Placement;
@@ -76,6 +77,7 @@ public class BuildCoordinator {
     public BuildSession loadPlan(BuildPlan plan) {
         session = new BuildSession(plan);
         session.transitionTo(BuildPlanState.LOADED);
+        debugToFile("Loaded plan " + plan.sourcePath().getFileName() + " with " + plan.placements().size() + " placements.");
         configStore.rememberLoadedPlan(plan);
         restoreProgressForLoadedPlan(session);
         progressStore.saveProgress(session);
@@ -99,6 +101,7 @@ public class BuildCoordinator {
             return false;
         }
 
+        debugToChatAndFile("Unloading current plan and clearing progress.");
         cancelActiveMovement();
         session = null;
         progressStore.clearProgress();
@@ -112,6 +115,7 @@ public class BuildCoordinator {
         }
 
         session.setOrigin(origin.toImmutable());
+        debugToChatAndFile("Origin set to " + origin.toShortString() + ".");
         progressStore.saveProgress(session);
         configStore.rememberOrigin(origin);
         return Optional.empty();
@@ -125,6 +129,7 @@ public class BuildCoordinator {
             return Optional.of("Origin is not set. Use /mapart setorigin first.");
         }
 
+        debugToChatAndFile("Starting build session from state " + session.getState() + ".");
         if (session.getState() == BuildPlanState.COMPLETED) {
             session.getProgress().reset();
             session.setRefillStatus(null);
@@ -149,6 +154,7 @@ public class BuildCoordinator {
             return sessionTransitionError;
         }
 
+        debugToChatAndFile("Pausing build session.");
         closeHandledScreen(MinecraftClient.getInstance());
 
         if (activeMovementTarget == null) {
@@ -169,6 +175,7 @@ public class BuildCoordinator {
             return Optional.of("No build session.");
         }
 
+        debugToChatAndFile("Stopping build session and resetting progress.");
         cancelActiveMovement();
         closeHandledScreen(MinecraftClient.getInstance());
         session.getProgress().reset();
@@ -192,6 +199,7 @@ public class BuildCoordinator {
         }
 
         BuildPlanState resumeState = session.getStateBeforePause() == null ? BuildPlanState.BUILDING : session.getStateBeforePause();
+        debugToChatAndFile("Resuming build session toward state " + resumeState + ".");
         Optional<String> sessionTransitionError = transitionSession(resumeState, "Can only resume while PAUSED.");
         if (sessionTransitionError.isPresent()) {
             return sessionTransitionError;
@@ -255,6 +263,7 @@ public class BuildCoordinator {
                     + stepResult.targetPos().toShortString() + ": " + movementRequest.message());
         }
 
+        debugToChatAndFile("Next placement target is " + stepResult.targetPos().toShortString() + " for block " + Registries.BLOCK.getId(stepResult.placement().block()) + ".");
         activeMovementTarget = stepResult.targetPos().toImmutable();
         activeMovementPurpose = MovementPurpose.BUILD;
         movementPaused = false;
@@ -410,6 +419,7 @@ public class BuildCoordinator {
                     + " at " + refillCheck.supplyPoint().pos().toShortString() + ": " + movementRequest.message());
         }
 
+        debugToChatAndFile("Heading to supply #" + refillCheck.supplyPoint().id() + " at " + refillCheck.supplyPoint().pos().toShortString() + " for refill.");
         activeMovementTarget = refillCheck.supplyPoint().pos().toImmutable();
         activeMovementPurpose = MovementPurpose.REFILL;
         movementPaused = false;
@@ -502,6 +512,7 @@ public class BuildCoordinator {
             awaitingSupplyScreen = true;
             supplyScreenWaitPollsRemaining = MAX_SUPPLY_SCREEN_WAIT_POLLS;
             refillActionCooldown = REFILL_ACTION_DELAY_TICKS;
+            debugToChatAndFile("Interacting with supply container at " + refillStatus.supplyPoint().pos().toShortString() + ".");
             return AssistedStepResult.arrived("Opening supply container at "
                     + refillStatus.supplyPoint().pos().toShortString() + ".");
         }
@@ -535,6 +546,7 @@ public class BuildCoordinator {
             client.interactionManager.clickSlot(handler.syncId, slotIndex, 0, SlotActionType.QUICK_MOVE, client.player);
             refillActionCooldown = REFILL_ACTION_DELAY_TICKS;
             int moved = Math.max(0, countPlayerItem(client.player, stack.getItem()) - beforeCount);
+            debugToChatAndFile("Withdrew " + MaterialCountFormatter.formatCount(moved, stack.getItem()) + " of " + itemId + " from supply.");
             return AssistedStepResult.arrived("Withdrew " + MaterialCountFormatter.formatCount(moved, stack.getItem())
                     + " of " + itemId + " from supply.");
         }
@@ -583,6 +595,7 @@ public class BuildCoordinator {
                     + target.toShortString() + ": " + movementRequest.message());
         }
 
+        debugToChatAndFile("Returning to build area near " + target.toShortString() + ".");
         activeMovementTarget = target;
         activeMovementPurpose = MovementPurpose.BUILD;
         movementPaused = false;
@@ -844,6 +857,7 @@ public class BuildCoordinator {
                 if (session.getState() == BuildPlanState.NEED_REFILL) {
                     transitionSession(BuildPlanState.REFILLING, "Cannot switch to REFILLING.");
                 }
+                debugToChatAndFile("Arrived at supply point " + reachedTarget.toShortString() + ".");
                 return AssistedStepResult.arrived("Arrived at supply point " + reachedTarget.toShortString() + ". Ready to refill.");
             }
 
@@ -851,6 +865,7 @@ public class BuildCoordinator {
                 transitionSession(BuildPlanState.BUILDING, "Cannot switch to BUILDING.");
             }
 
+            debugToChatAndFile("Reached build target area near " + reachedTarget.toShortString() + ".");
             return AssistedStepResult.arrived("Reached target area.");
         }
 
@@ -877,6 +892,7 @@ public class BuildCoordinator {
         movementPaused = false;
         closeHandledScreen(MinecraftClient.getInstance());
         resetRefillInteractionState();
+        debugToChatAndFile("Build paused after recoverable failure: " + message);
         return AssistedStepResult.failure(message, false);
     }
 
@@ -1035,6 +1051,19 @@ public class BuildCoordinator {
             }
         }
         progress.setCurrentRegionIndex(regions.size());
+    }
+
+
+    private void debugToChatAndFile(String message) {
+        if (MapArtRuntime.debugReporter() != null) {
+            MapArtRuntime.debugReporter().logToChatAndFile(message);
+        }
+    }
+
+    private void debugToFile(String message) {
+        if (MapArtRuntime.debugReporter() != null) {
+            MapArtRuntime.debugReporter().logToFile(message);
+        }
     }
 
     private enum MovementPurpose {

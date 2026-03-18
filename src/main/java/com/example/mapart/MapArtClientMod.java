@@ -13,6 +13,7 @@ import com.example.mapart.plan.state.BuildPlanService;
 import com.example.mapart.plan.state.WorldPlacementResolver;
 import com.example.mapart.render.HudRenderer;
 import com.example.mapart.render.SchematicOverlayRenderer;
+import com.example.mapart.runtime.DebugReporter;
 import com.example.mapart.runtime.MapArtRuntime;
 import com.example.mapart.settings.MapartSettingsStore;
 import com.example.mapart.supply.SupplyInteractionTracker;
@@ -35,10 +36,11 @@ public class MapArtClientMod implements ClientModInitializer {
         SupplyStore supplyStore = new SupplyStore();
         SupplyInteractionTracker supplyInteractionTracker = new SupplyInteractionTracker(supplyStore);
         supplyInteractionTracker.registerCallbacks();
+        DebugReporter debugReporter = new DebugReporter();
         BaritoneFacade baritoneFacade = BaritoneFacadeFactory.create();
         BuildCoordinator buildCoordinator = new BuildCoordinator(new WorldPlacementResolver(), configStore, progressStore, supplyStore, baritoneFacade);
         BuildPlanService buildPlanService = new BuildPlanService(loaderRegistry, buildCoordinator);
-        MapArtRuntime.initialize(buildPlanService, configStore, progressStore, settingsStore, supplyStore, baritoneFacade);
+        MapArtRuntime.initialize(buildPlanService, configStore, progressStore, settingsStore, supplyStore, baritoneFacade, debugReporter);
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
             dispatcher.register(MapArtCommand.create(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
@@ -53,20 +55,14 @@ public class MapArtClientMod implements ClientModInitializer {
                 return;
             }
 
-            if (assistedStep.failed()) {
-                client.player.sendMessage(net.minecraft.text.Text.literal("[MapArt] " + assistedStep.message()), false);
-                return;
-            }
-
-            if (assistedStep.done()) {
-                client.player.sendMessage(net.minecraft.text.Text.literal("[MapArt] " + assistedStep.message()), false);
-            }
+            debugReporter.logToFile("Assisted tick: " + assistedStep.message());
         });
 
         PlacementStatusResolver resolver = new PlacementStatusResolver();
         HudRenderCallback.EVENT.register(new HudRenderer(resolver));
         WorldRenderEvents.AFTER_TRANSLUCENT.register(new SchematicOverlayRenderer(resolver));
 
+        debugReporter.logToFile("Debug log file: " + debugReporter.logPath().toAbsolutePath());
         MapArtMod.LOGGER.info("Initialized mapart client command pipeline with /mapart, /maprunner, and /mapartrunner");
         MapArtMod.LOGGER.info("Baritone facade backend: {}", baritoneFacade.getClass().getSimpleName());
     }
