@@ -105,6 +105,24 @@ class BuildSessionStateTest {
         assertEquals(BuildPlanState.PAUSED, restoredSession.getState());
     }
 
+
+    @Test
+    void setOriginPersistsExplicitCoordinates() {
+        BuildCoordinator coordinator = new BuildCoordinator(
+                new WorldPlacementResolver(),
+                new ConfigStore(tempDir.resolve("config-explicit.json")),
+                new ProgressStore(tempDir.resolve("progress-explicit.json")),
+                new NoOpBaritoneFacade()
+        );
+
+        coordinator.loadPlan(plan(tempDir.resolve("explicit.nbt")));
+
+        Optional<String> error = coordinator.setOrigin(new BlockPos(12, 80, -6));
+
+        assertTrue(error.isEmpty());
+        assertEquals(new BlockPos(12, 80, -6), coordinator.sessionStatus().orElseThrow().origin());
+    }
+
     @Test
     void setOriginFailsWithoutLoadedPlan() {
         BuildCoordinator coordinator = new BuildCoordinator(
