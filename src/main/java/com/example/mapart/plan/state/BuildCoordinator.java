@@ -262,17 +262,11 @@ public class BuildCoordinator {
             return executePlacement(client, stepResult.placement(), stepResult.targetPos());
         }
 
-        BaritoneFacade.CommandResult movementRequest = baritoneFacade.goNear(stepResult.targetPos(), TARGET_APPROACH_RANGE);
-        if (!movementRequest.success()) {
-            return pauseForRecoverableFailure("Failed to start movement to "
-                    + stepResult.targetPos().toShortString() + ": " + movementRequest.message());
+        if (isWithinRange(client.player.getBlockPos(), stepResult.targetPos(), TARGET_APPROACH_RANGE)) {
+            return executePlacement(client, stepResult);
         }
 
-        debugToChatAndFile("Next placement target is " + stepResult.targetPos().toShortString() + " for block " + Registries.BLOCK.getId(stepResult.placement().block()) + ".");
-        activeMovementTarget = stepResult.targetPos().toImmutable();
-        activeMovementPurpose = MovementPurpose.BUILD;
-        movementPaused = false;
-        return AssistedStepResult.moving("Moving near " + activeMovementTarget.toShortString() + ".");
+        return beginBuildMovement(stepResult);
     }
 
     public Optional<String> debugSkipToSecondLastPlacement() {
@@ -876,7 +870,6 @@ public class BuildCoordinator {
                 transitionSession(BuildPlanState.BUILDING, "Cannot switch to BUILDING.");
             }
 
-            advanceBuildCursorAfterArrival(reachedTarget);
             debugToChatAndFile("Reached build target area near " + reachedTarget.toShortString() + ".");
             return AssistedStepResult.arrived("Reached target area.");
         }
@@ -895,64 +888,43 @@ public class BuildCoordinator {
         return AssistedStepResult.noop();
     }
 
-    private void advanceBuildCursorAfterArrival(BlockPos reachedTarget) {
-        if (session == null || reachedTarget == null) {
-            return;
-        }
-        if (session.getState() != BuildPlanState.BUILDING && session.getState() != BuildPlanState.RETURNING) {
-            return;
+
+    private AssistedStepResult beginBuildMovement(StepResult stepResult) {
+        BaritoneFacade.CommandResult movementRequest = baritoneFacade.goNear(stepResult.targetPos(), TARGET_APPROACH_RANGE);
+        if (!movementRequest.success()) {
+            return pauseForRecoverableFailure("Failed to start movement to "
+                    + stepResult.targetPos().toShortString() + ": " + movementRequest.message());
         }
 
-        debugToFile("Reached placement approach range for " + reachedTarget.toShortString() + "; awaiting controlled placement.");
+        debugToChatAndFile("Next placement target is " + stepResult.targetPos().toShortString() + " for block " + Registries.BLOCK.getId(stepResult.placement().block()) + ".");
+        activeMovementTarget = stepResult.targetPos().toImmutable();
+        activeMovementPurpose = MovementPurpose.BUILD;
+        movementPaused = false;
+        return AssistedStepResult.moving("Moving near " + activeMovementTarget.toShortString() + ".");
     }
 
-    private AssistedStepResult executePlacement(MinecraftClient client, Placement placement, BlockPos targetPos) {
-        if (session == null) {
-            return AssistedStepResult.noop();
-        }
-
-        PlacementExecutor.PlacementResult result = placementExecutor.execute(client, placement, targetPos);
-        if (result.alreadyCorrectBlock()) {
-            completePlacement(placement, targetPos, true);
-            return AssistedStepResult.arrived("Skipped already-correct block at " + targetPos.toShortString() + ".");
-        }
-        if (result.placedBlock()) {
-            completePlacement(placement, targetPos, false);
-            return AssistedStepResult.arrived("Placed " + Registries.BLOCK.getId(placement.block()) + " at " + targetPos.toShortString() + ".");
-        }
-        if (result.needsRefill()) {
-            Optional<RefillCheck> refillCheck = checkForRefill(client);
-            if (refillCheck.isPresent()) {
-                debugToChatAndFile("Placement requires refill before placing " + Registries.BLOCK.getId(placement.block())
-                        + " at " + targetPos.toShortString() + ".");
-                return beginRefillMovement(refillCheck.get());
+    private AssistedStepResult executePlacement(MinecraftClient client, StepResult stepResult) {
+        PlacementResult result = placementExecutor.execute(client, session, stepResult.placement(), stepResult.targetPos());
+        return switch (result.status()) {
+            case PLACED, ALREADY_CORRECT -> {
+                applyProgressAdvance(session.getPlan(), session.getCurrentPlacementIndex() + 1, 1);
+                debugToChatAndFile(result.message());
+                yield AssistedStepResult.arrived(result.message());
             }
-            return pauseForRecoverableFailure(result.message());
-        }
-        if (result.unrecoverableFailure()) {
-            markSessionError();
-            debugToChatAndFile("Unrecoverable placement failure: " + result.message());
-            return AssistedStepResult.failure(result.message(), false);
-        }
-
-        debugToChatAndFile("Placement failed at " + targetPos.toShortString() + ": " + result.message());
-        return pauseForRecoverableFailure(result.message());
-    }
-
-    private void completePlacement(Placement placement, BlockPos targetPos, boolean skipped) {
-        if (session == null) {
-            return;
-        }
-
-        BuildPlan plan = session.getPlan();
-        int nextPlacementIndex = Math.min(plan.placements().size(), session.getCurrentPlacementIndex() + 1);
-        applyProgressAdvance(plan, nextPlacementIndex, 1);
-        if (session.getCurrentPlacementIndex() >= plan.placements().size()) {
-            transitionToCompleted();
-        }
-        debugToChatAndFile((skipped ? "Skipping" : "Confirmed placement of") + " "
-                + Registries.BLOCK.getId(placement.block()) + " at " + targetPos.toShortString()
-                + ". Progress is now " + session.getCurrentPlacementIndex() + "/" + plan.placements().size() + ".");
+            case MISSING_ITEM -> {
+                Optional<RefillCheck> refillCheck = checkForRefill(client);
+                if (refillCheck.isPresent()) {
+                    yield beginRefillMovement(refillCheck.get());
+                }
+                yield pauseForRecoverableFailure(result.message());
+            }
+            case MOVE_REQUIRED -> yield beginBuildMovement(stepResult);
+            case RETRY -> {
+                debugToFile("Placement retry needed: " + result.message());
+                yield AssistedStepResult.noop();
+            }
+            case ERROR -> yield pauseForRecoverableFailure(result.message());
+        };
     }
 
     private AssistedStepResult pauseForRecoverableFailure(String message) {

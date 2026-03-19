@@ -4,7 +4,6 @@ import com.example.mapart.plan.Placement;
 import net.minecraft.block.BlockState;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.network.ClientPlayerInteractionManager;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.BlockItem;
@@ -22,196 +21,146 @@ import net.minecraft.util.math.Vec3d;
 import java.util.Optional;
 
 public class PlacementExecutor {
-    private static final int HOTBAR_SIZE = 9;
-    private static final int PLAYER_MAIN_START = 9;
-    private static final int PLAYER_MAIN_END = 35;
-    private static final double MAX_REACH_SQUARED = 36.0D;
+    private static final int PLACE_RANGE = 4;
+    private static final Direction[] FACE_PRIORITY = new Direction[]{
+            Direction.DOWN,
+            Direction.NORTH,
+            Direction.SOUTH,
+            Direction.WEST,
+            Direction.EAST,
+            Direction.UP
+    };
 
-    public PlacementResult execute(MinecraftClient client, Placement placement, BlockPos targetPos) {
-        if (client == null || client.player == null || client.world == null) {
-            return PlacementResult.unrecoverable("Client context is unavailable.");
+    public PlacementResult execute(MinecraftClient client, BuildSession session, Placement placement, BlockPos targetPos) {
+        if (client == null || client.player == null || client.world == null || client.interactionManager == null) {
+            return PlacementResult.error("Client context is unavailable for placement.");
         }
-        if (placement == null || targetPos == null) {
-            return PlacementResult.unrecoverable("Placement target is unresolved.");
+        if (session == null || placement == null || targetPos == null) {
+            return PlacementResult.error("Placement target is not available.");
+        }
+        if (session.getOrigin() == null) {
+            return PlacementResult.error("Origin is not set.");
         }
 
         ClientPlayerEntity player = client.player;
         ClientWorld world = client.world;
-        ClientPlayerInteractionManager interactionManager = client.interactionManager;
-        if (interactionManager == null) {
-            return PlacementResult.recoverable("Interaction manager is unavailable.");
-        }
+
         if (!world.isPosLoaded(targetPos)) {
-            return PlacementResult.recoverable("Target chunk is not loaded at " + targetPos.toShortString() + ".");
+            return PlacementResult.retry("Target chunk is not loaded at " + targetPos.toShortString() + ".");
         }
 
         BlockState currentState = world.getBlockState(targetPos);
         if (currentState.isOf(placement.block())) {
-            return PlacementResult.alreadyCorrect();
+            return PlacementResult.alreadyCorrect("Target already matches expected block at " + targetPos.toShortString() + ".");
         }
         if (!currentState.isReplaceable()) {
-            return PlacementResult.recoverable("Target " + targetPos.toShortString() + " is occupied by "
-                    + Registries.BLOCK.getId(currentState.getBlock()) + ".");
+            return PlacementResult.retry("Target is occupied by " + Registries.BLOCK.getId(currentState.getBlock())
+                    + " at " + targetPos.toShortString() + ".");
+        }
+
+        if (!isWithinPlaceRange(player.getEyePos(), targetPos)) {
+            return PlacementResult.moveRequired("Target is outside placement range at " + targetPos.toShortString() + ".");
         }
 
         Item expectedItem = placement.block().asItem();
         if (!(expectedItem instanceof BlockItem)) {
-            return PlacementResult.unrecoverable("Expected block " + Registries.BLOCK.getId(placement.block())
-                    + " has no placeable item representation.");
+            return PlacementResult.error("Expected block " + Registries.BLOCK.getId(placement.block()) + " does not have a placeable block item.");
         }
 
-        SlotSelection slotSelection = selectItem(player, interactionManager, expectedItem);
-        if (!slotSelection.success()) {
-            return PlacementResult.needsRefill("Missing required item " + Registries.ITEM.getId(expectedItem) + " for "
-                    + targetPos.toShortString() + ".");
-        }
-
-        Optional<ResolvedPlacementTarget> resolvedTarget = resolvePlacementTarget(player, world, targetPos);
-        if (resolvedTarget.isEmpty()) {
-            return PlacementResult.recoverable("No valid neighbor face was found for " + targetPos.toShortString() + ".");
-        }
-
-        ResolvedPlacementTarget interactionTarget = resolvedTarget.get();
-        if (player.getEyePos().squaredDistanceTo(interactionTarget.hitPos()) > MAX_REACH_SQUARED) {
-            return PlacementResult.recoverable("Target " + targetPos.toShortString() + " is out of placement reach.");
-        }
-
-        ActionResult result = interactionManager.interactBlock(player, Hand.MAIN_HAND, interactionTarget.hitResult());
-        if (!result.isAccepted()) {
-            return PlacementResult.recoverable("Placement interaction failed at " + targetPos.toShortString() + ".");
-        }
-
-        player.swingHand(Hand.MAIN_HAND);
-        interactionManager.cancelBlockBreaking();
-
-        BlockState afterState = world.getBlockState(targetPos);
-        if (!afterState.isOf(placement.block())) {
-            return PlacementResult.recoverable("Placement at " + targetPos.toShortString() + " did not match expected block "
+        InventorySelection selection = ensureSelectedItem(client, player, expectedItem);
+        if (!selection.available()) {
+            return PlacementResult.missingItem("Missing required item " + Registries.ITEM.getId(expectedItem) + " for "
                     + Registries.BLOCK.getId(placement.block()) + ".");
         }
 
-        return PlacementResult.placed(slotSelection.selectedHotbarSlot(), targetPos);
-    }
-
-    private SlotSelection selectItem(ClientPlayerEntity player, ClientPlayerInteractionManager interactionManager, Item item) {
-        PlayerInventory inventory = player.getInventory();
-        if (inventory.getMainHandStack().isOf(item)) {
-            return SlotSelection.success(inventory.selectedSlot);
+        Optional<BlockHitResult> hitResult = resolvePlacementHit(world, targetPos, player.getEyePos());
+        if (hitResult.isEmpty()) {
+            return PlacementResult.retry("No valid neighbor face is available to place at " + targetPos.toShortString() + ".");
         }
 
-        for (int slot = 0; slot < HOTBAR_SIZE; slot++) {
-            if (inventory.getStack(slot).isOf(item)) {
-                inventory.selectedSlot = slot;
-                return SlotSelection.success(slot);
+        ActionResult result = client.interactionManager.interactBlock(player, Hand.MAIN_HAND, hitResult.get());
+        if (result.isAccepted()) {
+            player.swingHand(Hand.MAIN_HAND);
+        }
+        if (!result.isAccepted()) {
+            return PlacementResult.retry("Placement interaction was not accepted for " + targetPos.toShortString() + ".");
+        }
+
+        BlockState placedState = world.getBlockState(targetPos);
+        if (placedState.isOf(placement.block())) {
+            return PlacementResult.placed("Placed " + Registries.BLOCK.getId(placement.block()) + " at " + targetPos.toShortString() + ".");
+        }
+
+        return PlacementResult.retry("Placement interaction succeeded but the world still shows "
+                + Registries.BLOCK.getId(placedState.getBlock()) + " at " + targetPos.toShortString() + ".");
+    }
+
+    private InventorySelection ensureSelectedItem(MinecraftClient client, ClientPlayerEntity player, Item expectedItem) {
+        PlayerInventory inventory = player.getInventory();
+        if (player.getMainHandStack().isOf(expectedItem)) {
+            return InventorySelection.selected(inventory.selectedSlot, false);
+        }
+
+        for (int hotbarSlot = 0; hotbarSlot < PlayerInventory.getHotbarSize(); hotbarSlot++) {
+            if (inventory.getStack(hotbarSlot).isOf(expectedItem)) {
+                inventory.selectedSlot = hotbarSlot;
+                return InventorySelection.selected(hotbarSlot, false);
             }
         }
 
-        for (int slot = PLAYER_MAIN_START; slot <= PLAYER_MAIN_END; slot++) {
-            if (!inventory.getStack(slot).isOf(item)) {
+        int swapHotbarSlot = inventory.selectedSlot;
+        for (int slot = PlayerInventory.getHotbarSize(); slot < PlayerInventory.MAIN_SIZE; slot++) {
+            if (!inventory.getStack(slot).isOf(expectedItem)) {
                 continue;
             }
-            interactionManager.clickSlot(player.playerScreenHandler.syncId, slot, inventory.selectedSlot, SlotActionType.SWAP, player);
-            if (inventory.getMainHandStack().isOf(item)) {
-                return SlotSelection.success(inventory.selectedSlot);
+            client.interactionManager.clickSlot(player.playerScreenHandler.syncId, slot, swapHotbarSlot, SlotActionType.SWAP, player);
+            if (inventory.getStack(swapHotbarSlot).isOf(expectedItem)) {
+                inventory.selectedSlot = swapHotbarSlot;
+                return InventorySelection.selected(swapHotbarSlot, true);
             }
-            return SlotSelection.failure();
         }
 
-        return SlotSelection.failure();
+        return InventorySelection.missing();
     }
 
-    private Optional<ResolvedPlacementTarget> resolvePlacementTarget(ClientPlayerEntity player, ClientWorld world, BlockPos targetPos) {
-        Vec3d targetCenter = Vec3d.ofCenter(targetPos);
-        Direction bestDirection = null;
-        double bestDistance = Double.MAX_VALUE;
-
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = targetPos.offset(direction);
+    private Optional<BlockHitResult> resolvePlacementHit(ClientWorld world, BlockPos targetPos, Vec3d eyePos) {
+        for (Direction face : FACE_PRIORITY) {
+            BlockPos neighborPos = targetPos.offset(face);
             if (!world.isPosLoaded(neighborPos)) {
                 continue;
             }
 
             BlockState neighborState = world.getBlockState(neighborPos);
-            if (neighborState.isAir() || neighborState.isReplaceable()) {
+            if (neighborState.isReplaceable()) {
                 continue;
             }
 
-            Vec3d hitPos = targetCenter.add(Vec3d.of(direction.getVector()).multiply(0.5D - 1.0E-3D));
-            double distance = player.getEyePos().squaredDistanceTo(hitPos);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestDirection = direction;
+            Direction interactionSide = face.getOpposite();
+            Vec3d hitPos = Vec3d.ofCenter(targetPos).add(
+                    interactionSide.getOffsetX() * 0.5,
+                    interactionSide.getOffsetY() * 0.5,
+                    interactionSide.getOffsetZ() * 0.5
+            );
+            if (eyePos.squaredDistanceTo(hitPos) > PLACE_RANGE * PLACE_RANGE) {
+                continue;
             }
+            return Optional.of(new BlockHitResult(hitPos, interactionSide, neighborPos, false));
         }
-
-        if (bestDirection == null) {
-            return Optional.empty();
-        }
-
-        Direction interactionFace = bestDirection.getOpposite();
-        Vec3d hitPos = targetCenter.add(Vec3d.of(bestDirection.getVector()).multiply(0.5D - 1.0E-3D));
-        return Optional.of(new ResolvedPlacementTarget(
-                new BlockHitResult(hitPos, interactionFace, targetPos.offset(bestDirection), false),
-                hitPos
-        ));
+        return Optional.empty();
     }
 
-    public record PlacementResult(Status status, String message, BlockPos targetPos, int selectedHotbarSlot) {
-        enum Status {
-            PLACED,
-            ALREADY_CORRECT,
-            NEEDS_REFILL,
-            RECOVERABLE_FAILURE,
-            UNRECOVERABLE_FAILURE
-        }
-
-        static PlacementResult placed(int hotbarSlot, BlockPos targetPos) {
-            return new PlacementResult(Status.PLACED, "", targetPos, hotbarSlot);
-        }
-
-        static PlacementResult alreadyCorrect() {
-            return new PlacementResult(Status.ALREADY_CORRECT, "", null, -1);
-        }
-
-        static PlacementResult needsRefill(String message) {
-            return new PlacementResult(Status.NEEDS_REFILL, message, null, -1);
-        }
-
-        static PlacementResult recoverable(String message) {
-            return new PlacementResult(Status.RECOVERABLE_FAILURE, message, null, -1);
-        }
-
-        static PlacementResult unrecoverable(String message) {
-            return new PlacementResult(Status.UNRECOVERABLE_FAILURE, message, null, -1);
-        }
-
-        public boolean placedBlock() {
-            return status == Status.PLACED;
-        }
-
-        public boolean alreadyCorrectBlock() {
-            return status == Status.ALREADY_CORRECT;
-        }
-
-        public boolean needsRefill() {
-            return status == Status.NEEDS_REFILL;
-        }
-
-        public boolean unrecoverableFailure() {
-            return status == Status.UNRECOVERABLE_FAILURE;
-        }
+    private boolean isWithinPlaceRange(Vec3d eyePos, BlockPos targetPos) {
+        Vec3d center = Vec3d.ofCenter(targetPos);
+        return eyePos.squaredDistanceTo(center) <= PLACE_RANGE * PLACE_RANGE;
     }
 
-    private record SlotSelection(boolean success, int selectedHotbarSlot) {
-        static SlotSelection success(int selectedHotbarSlot) {
-            return new SlotSelection(true, selectedHotbarSlot);
+    private record InventorySelection(boolean available, int selectedSlot, boolean movedToHotbar) {
+        static InventorySelection selected(int selectedSlot, boolean movedToHotbar) {
+            return new InventorySelection(true, selectedSlot, movedToHotbar);
         }
 
-        static SlotSelection failure() {
-            return new SlotSelection(false, -1);
+        static InventorySelection missing() {
+            return new InventorySelection(false, -1, false);
         }
-    }
-
-    private record ResolvedPlacementTarget(BlockHitResult hitResult, Vec3d hitPos) {
     }
 }
