@@ -458,6 +458,10 @@ public class BuildCoordinator {
                     : AssistedStepResult.noop();
         }
 
+        if (activeMovementTarget != null) {
+            return monitorActiveMovement(client);
+        }
+
         return switch (session.getState()) {
             case NEED_REFILL -> refillStatus.supplyPoint() == null
                     ? AssistedStepResult.noop()
