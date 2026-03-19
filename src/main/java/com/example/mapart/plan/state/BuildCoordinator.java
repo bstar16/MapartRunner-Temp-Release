@@ -58,6 +58,7 @@ public class BuildCoordinator {
     private BuildSession session;
     private BlockPos activeMovementTarget;
     private boolean movementPaused;
+    private boolean skipRefillCheckOnce;
     private MovementPurpose activeMovementPurpose = MovementPurpose.BUILD;
     private int refillActionCooldown;
     private boolean awaitingSupplyScreen;
@@ -282,6 +283,12 @@ public class BuildCoordinator {
 
         if (isWithinPlacementReach(client, stepResult.targetPos())) {
             return executePlacement(client, stepResult);
+        }
+
+        if (skipRefillCheckOnce) {
+            skipRefillCheckOnce = false;
+            debugToFile("Skipping one proactive refill check after returning from supply.");
+            return beginBuildMovement(stepResult);
         }
 
         Optional<RefillCheck> refillCheck = checkForRefill(client);
@@ -604,6 +611,7 @@ public class BuildCoordinator {
         closeHandledScreen(client);
         resetRefillInteractionState();
         session.setRefillStatus(null);
+        skipRefillCheckOnce = true;
         progressStore.saveProgress(session);
         return continueBuildReturnMovement(client, refillStatus.returnTarget());
     }
