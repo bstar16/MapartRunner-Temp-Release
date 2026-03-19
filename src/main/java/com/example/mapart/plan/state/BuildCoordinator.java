@@ -259,10 +259,6 @@ public class BuildCoordinator {
             return AssistedStepResult.completed(stepResult.message());
         }
         if (isWithinRange(client.player.getBlockPos(), stepResult.targetPos(), TARGET_APPROACH_RANGE)) {
-            return executePlacement(client, stepResult.placement(), stepResult.targetPos());
-        }
-
-        if (isWithinRange(client.player.getBlockPos(), stepResult.targetPos(), TARGET_APPROACH_RANGE)) {
             return executePlacement(client, stepResult);
         }
 
@@ -918,12 +914,12 @@ public class BuildCoordinator {
                 }
                 yield pauseForRecoverableFailure(result.message());
             }
-            case MOVE_REQUIRED -> yield beginBuildMovement(stepResult);
+            case MOVE_REQUIRED -> beginBuildMovement(stepResult);
             case RETRY -> {
                 debugToFile("Placement retry needed: " + result.message());
                 yield AssistedStepResult.noop();
             }
-            case ERROR -> yield pauseForRecoverableFailure(result.message());
+            case ERROR -> pauseForRecoverableFailure(result.message());
         };
     }
 
