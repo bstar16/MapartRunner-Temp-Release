@@ -258,6 +258,9 @@ public class BuildCoordinator {
             cancelActiveMovement();
             return AssistedStepResult.completed(stepResult.message());
         }
+        if (isWithinRange(client.player.getBlockPos(), stepResult.targetPos(), TARGET_APPROACH_RANGE)) {
+            return executePlacement(client, stepResult.placement(), stepResult.targetPos());
+        }
 
         if (isWithinRange(client.player.getBlockPos(), stepResult.targetPos(), TARGET_APPROACH_RANGE)) {
             return executePlacement(client, stepResult);
@@ -434,18 +437,14 @@ public class BuildCoordinator {
         }
 
         return switch (session.getState()) {
-            case NEED_REFILL -> {
-                if (refillStatus.supplyPoint() == null) {
-                    yield AssistedStepResult.noop();
-                }
-
-                yield beginRefillMovement(new RefillCheck(
-                        session.getPlan().regions().get(session.getCurrentRegionIndex()),
-                        refillStatus.missingMaterials(),
-                        refillStatus.supplyPoints(),
-                        refillStatus.supplyIndex()
-                ));
-            }
+            case NEED_REFILL -> refillStatus.supplyPoint() == null
+                    ? AssistedStepResult.noop()
+                    : beginRefillMovement(new RefillCheck(
+                            session.getPlan().regions().get(session.getCurrentRegionIndex()),
+                            refillStatus.missingMaterials(),
+                            refillStatus.supplyPoints(),
+                            refillStatus.supplyIndex()
+                    ));
             case REFILLING -> performRefill(client, refillStatus);
             case RETURNING -> continueBuildReturnMovement(client, refillStatus.returnTarget());
             default -> AssistedStepResult.noop();
