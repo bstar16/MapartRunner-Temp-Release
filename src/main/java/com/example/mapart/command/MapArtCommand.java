@@ -453,6 +453,7 @@ public final class MapArtCommand {
         source.sendFeedback(Text.literal("overlayCurrentRegionOnly=" + settings.overlayCurrentRegionOnly()));
         source.sendFeedback(Text.literal("overlayShowOnlyIncorrect=" + settings.overlayShowOnlyIncorrect()));
         source.sendFeedback(Text.literal("hudCompact=" + settings.hudCompact()));
+        source.sendFeedback(Text.literal("clientTimerSpeed=" + settings.clientTimerSpeed()));
         source.sendFeedback(Text.literal("hudX=" + settings.hudX()));
         source.sendFeedback(Text.literal("hudY=" + settings.hudY()));
         source.sendFeedback(Text.literal("clientTimerSpeed=" + ClientTimerController.getMultiplier()));

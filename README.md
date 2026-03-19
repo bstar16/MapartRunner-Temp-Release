@@ -87,7 +87,7 @@ Available subcommands:
 - `info`
 - `unload` (OP level 2 required)
 - `panic` (client-side emergency stop + unload)
-- `clienttimerspeed <multiplier>` (sets the actual client timer multiplier; `1` is normal speed and decimal values like `0.5` or `2.0` work)
+- `clienttimerspeed <multiplier>` (sets how many assisted automation passes run each client tick; useful for testing)
 
 Example:
 ```mcfunction
