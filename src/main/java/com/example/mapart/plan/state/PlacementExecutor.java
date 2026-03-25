@@ -58,7 +58,7 @@ public class PlacementExecutor {
                     + " at " + targetPos.toShortString() + ".");
         }
 
-        if (!isWithinPlaceRange(player.getEyePos(), targetPos)) {
+        if (!isWithinPlaceRange(player.getBlockPos(), targetPos)) {
             return PlacementResult.moveRequired("Target is outside placement range at " + targetPos.toShortString() + ".");
         }
 
@@ -73,7 +73,7 @@ public class PlacementExecutor {
                     + Registries.BLOCK.getId(placement.block()) + ".");
         }
 
-        Optional<BlockHitResult> hitResult = resolvePlacementHit(world, targetPos, player.getEyePos());
+        Optional<BlockHitResult> hitResult = resolvePlacementHit(world, targetPos);
         if (hitResult.isEmpty()) {
             return PlacementResult.retry("No valid neighbor face is available to place at " + targetPos.toShortString() + ".");
         }
@@ -123,7 +123,7 @@ public class PlacementExecutor {
         return InventorySelection.missing();
     }
 
-    private Optional<BlockHitResult> resolvePlacementHit(ClientWorld world, BlockPos targetPos, Vec3d eyePos) {
+    private Optional<BlockHitResult> resolvePlacementHit(ClientWorld world, BlockPos targetPos) {
         for (Direction face : FACE_PRIORITY) {
             BlockPos neighborPos = targetPos.offset(face);
             if (!world.isPosLoaded(neighborPos)) {
@@ -141,17 +141,15 @@ public class PlacementExecutor {
                     interactionSide.getOffsetY() * 0.5,
                     interactionSide.getOffsetZ() * 0.5
             );
-            if (eyePos.squaredDistanceTo(hitPos) > PLACE_RANGE * PLACE_RANGE) {
-                continue;
-            }
             return Optional.of(new BlockHitResult(hitPos, interactionSide, neighborPos, false));
         }
         return Optional.empty();
     }
 
-    private boolean isWithinPlaceRange(Vec3d eyePos, BlockPos targetPos) {
-        Vec3d center = Vec3d.ofCenter(targetPos);
-        return eyePos.squaredDistanceTo(center) <= PLACE_RANGE * PLACE_RANGE;
+    private boolean isWithinPlaceRange(BlockPos playerPos, BlockPos targetPos) {
+        return Math.abs(playerPos.getX() - targetPos.getX()) <= PLACE_RANGE
+                && Math.abs(playerPos.getY() - targetPos.getY()) <= PLACE_RANGE
+                && Math.abs(playerPos.getZ() - targetPos.getZ()) <= PLACE_RANGE;
     }
 
     private record InventorySelection(boolean available, int selectedSlot, boolean movedToHotbar) {
