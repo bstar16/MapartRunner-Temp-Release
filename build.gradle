@@ -34,12 +34,13 @@ test {
 	useJUnitPlatform()
 }
 
+def modVersion = version.toString()
 
-processResources {
-	inputs.property "version", project.version
+tasks.named("processResources", ProcessResources) {
+	inputs.property("version", modVersion)
 
 	filesMatching("fabric.mod.json") {
-		expand "version": project.version
+		expand(version: modVersion)
 	}
 }
 
