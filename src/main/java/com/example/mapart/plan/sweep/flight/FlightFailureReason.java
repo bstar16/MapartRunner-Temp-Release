@@ -1,0 +1,11 @@
+package com.example.mapart.plan.sweep.flight;
+
+public enum FlightFailureReason {
+    TAKEOFF_TIMEOUT,
+    ENTRY_ALIGNMENT_TIMEOUT,
+    ALTITUDE_BAND_VIOLATION,
+    ENDPOINT_APPROACH_TIMEOUT,
+    TURN_PLAN_UNAVAILABLE,
+    RECOVERY_EXHAUSTED,
+    INTERRUPTED_BY_CALLER
+}
