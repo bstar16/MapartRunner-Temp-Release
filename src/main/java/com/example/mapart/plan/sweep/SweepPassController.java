@@ -97,7 +97,15 @@ public final class SweepPassController {
         }
 
         if (flightController != null) {
-            flightController.tick(ElytraFlightController.FlightTickInput.currentLaneOnly(input.worldPlayerPosition(), input.fallFlying()));
+            flightController.tick(new ElytraFlightController.FlightTickInput(
+                    input.worldPlayerPosition(),
+                    input.fallFlying(),
+                    input.onGround(),
+                    input.inSchematicBounds(),
+                    input.inLaneCorridor(),
+                    input.corridorCenterTarget(),
+                    Optional.empty()
+            ));
             if (flightController.state() == ElytraFlightState.FAILED) {
                 state = SweepPassState.FAILED;
                 return;
@@ -268,18 +276,31 @@ public final class SweepPassController {
         return successfulPlacements.contains(placementIndex) || exhaustedPlacements.contains(placementIndex);
     }
 
-    public record PassTickInput(Vec3d worldPlayerPosition, Vec3d relativePlayerPosition, boolean fallFlying) {
+    public record PassTickInput(Vec3d worldPlayerPosition,
+                                Vec3d relativePlayerPosition,
+                                boolean fallFlying,
+                                boolean onGround,
+                                boolean inSchematicBounds,
+                                boolean inLaneCorridor,
+                                Optional<Vec3d> corridorCenterTarget) {
         public PassTickInput {
             Objects.requireNonNull(worldPlayerPosition, "worldPlayerPosition");
             Objects.requireNonNull(relativePlayerPosition, "relativePlayerPosition");
+            Objects.requireNonNull(corridorCenterTarget, "corridorCenterTarget");
         }
 
         public static PassTickInput grounded(Vec3d playerPosition) {
-            return new PassTickInput(playerPosition, playerPosition, false);
+            return new PassTickInput(playerPosition, playerPosition, false, true, true, true, Optional.empty());
         }
 
-        public static PassTickInput withWorldAndRelative(Vec3d worldPlayerPosition, Vec3d relativePlayerPosition, boolean fallFlying) {
-            return new PassTickInput(worldPlayerPosition, relativePlayerPosition, fallFlying);
+        public static PassTickInput withWorldAndRelative(Vec3d worldPlayerPosition,
+                                                       Vec3d relativePlayerPosition,
+                                                       boolean fallFlying,
+                                                       boolean onGround,
+                                                       boolean inSchematicBounds,
+                                                       boolean inLaneCorridor,
+                                                       Optional<Vec3d> corridorCenterTarget) {
+            return new PassTickInput(worldPlayerPosition, relativePlayerPosition, fallFlying, onGround, inSchematicBounds, inLaneCorridor, corridorCenterTarget);
         }
     }
 }

@@ -39,7 +39,7 @@ class ElytraFlightControllerTest {
     void takeoffTimeoutFailsWhenRecoveryDisabled() {
         BuildLane lane = lane(0, LaneDirection.FORWARD, 3, 0, 8);
         ElytraFlightController controller = controller(lane,
-                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 1, 10, 10, 0));
+                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 1, 10, 10, 30, 0));
 
         controller.tick(ElytraFlightController.FlightTickInput.currentLaneOnly(new Vec3d(0.5, 70.0, 0.5), false));
         controller.tick(ElytraFlightController.FlightTickInput.currentLaneOnly(new Vec3d(0.5, 70.0, 0.5), false));
@@ -100,7 +100,7 @@ class ElytraFlightControllerTest {
     void failureResultPreservesTypedFailureMetadata() {
         BuildLane lane = lane(0, LaneDirection.FORWARD, 3, 0, 8);
         ElytraFlightController controller = controller(lane,
-                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 3, 1, 10, 0));
+                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 3, 1, 10, 30, 0));
 
         controller.tick(ElytraFlightController.FlightTickInput.currentLaneOnly(new Vec3d(0.5, 70.0, 0.5), true));
         controller.tick(ElytraFlightController.FlightTickInput.currentLaneOnly(new Vec3d(1.0, 70.0, 10.0), true));
@@ -132,7 +132,7 @@ class ElytraFlightControllerTest {
     }
 
     private static ElytraFlightControllerSettings settings(int maxRecoveryAttempts) {
-        return new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 10, 10, 10, maxRecoveryAttempts);
+        return new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 10, 10, 10, 30, maxRecoveryAttempts);
     }
 
     private static BuildLane lane(int laneIndex, LaneDirection direction, int fixedCoordinate, int minProgress, int maxProgress) {

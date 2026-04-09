@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -156,7 +157,7 @@ class SweepPassControllerTest {
 
         ElytraFlightController flightController = new ElytraFlightController(
                 lane,
-                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 20, 20, 20, 0),
+                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 20, 20, 20, 30, 0),
                 new LaneEntryPlanner(),
                 new TurnPlanner(),
                 new FlightRecoveryHandler()
@@ -174,11 +175,11 @@ class SweepPassControllerTest {
                 flightController
         );
 
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(1.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(1.5, 70.0, lane.fixedCoordinate() + 0.5), true));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(2.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(2.5, 70.0, lane.fixedCoordinate() + 0.5), true));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(7.0, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(7.0, 70.0, lane.fixedCoordinate() + 0.5), true));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(8.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(8.5, 70.0, lane.fixedCoordinate() + 0.5), true));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(1.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(1.5, 70.0, lane.fixedCoordinate() + 0.5), true, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(2.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(2.5, 70.0, lane.fixedCoordinate() + 0.5), true, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(7.0, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(7.0, 70.0, lane.fixedCoordinate() + 0.5), true, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(8.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(8.5, 70.0, lane.fixedCoordinate() + 0.5), true, false, true, true, Optional.empty()));
 
         SweepPassResult result = controller.result();
         assertEquals(SweepPassState.COMPLETE, result.finalState());
@@ -193,7 +194,7 @@ class SweepPassControllerTest {
         BuildPlaneModel model = modelFor(List.of(placement(3, lane.fixedCoordinate())));
         ElytraFlightController flightController = new ElytraFlightController(
                 lane,
-                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 1, 10, 10, 0),
+                new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 1, 10, 10, 30, 0),
                 new LaneEntryPlanner(),
                 new TurnPlanner(),
                 new FlightRecoveryHandler()
@@ -208,9 +209,9 @@ class SweepPassControllerTest {
                 flightController
         );
 
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false));
-        controller.tick(new SweepPassController.PassTickInput(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false, false, true, true, Optional.empty()));
+        controller.tick(SweepPassController.PassTickInput.withWorldAndRelative(new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), new Vec3d(0.5, 70.0, lane.fixedCoordinate() + 0.5), false, false, true, true, Optional.empty()));
 
         SweepPassResult result = controller.result();
         assertEquals(SweepPassState.FAILED, result.finalState());
