@@ -8,6 +8,7 @@ public record ElytraFlightControllerSettings(
         int takeoffTimeoutTicks,
         int laneEntryTimeoutTicks,
         int endpointApproachTimeoutTicks,
+        int recoveryTimeoutTicks,
         int maxRecoveryAttempts
 ) {
     public ElytraFlightControllerSettings {
@@ -20,7 +21,7 @@ public record ElytraFlightControllerSettings(
         if (endpointApproachDistance < 0.0 || Double.isNaN(endpointApproachDistance)) {
             throw new IllegalArgumentException("endpointApproachDistance must be >= 0");
         }
-        if (takeoffTimeoutTicks <= 0 || laneEntryTimeoutTicks <= 0 || endpointApproachTimeoutTicks <= 0) {
+        if (takeoffTimeoutTicks <= 0 || laneEntryTimeoutTicks <= 0 || endpointApproachTimeoutTicks <= 0 || recoveryTimeoutTicks <= 0) {
             throw new IllegalArgumentException("timeouts must be > 0");
         }
         if (maxRecoveryAttempts < 0) {
@@ -29,6 +30,6 @@ public record ElytraFlightControllerSettings(
     }
 
     public static ElytraFlightControllerSettings defaults() {
-        return new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 40, 40, 60, 1);
+        return new ElytraFlightControllerSettings(65.0, 80.0, 0.75, 6.0, 40, 40, 60, 80, 1);
     }
 }

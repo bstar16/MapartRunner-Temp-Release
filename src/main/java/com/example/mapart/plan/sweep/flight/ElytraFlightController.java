@@ -30,6 +30,7 @@ public final class ElytraFlightController {
     private FlightFailureReason terminalFailureReason;
     private FlightControlCommand lastCommand = FlightControlCommand.idle();
     private int sustainedAltitudeViolationTicks;
+    private int outOfBoundsTicks;
 
     public ElytraFlightController(BuildLane lane,
                                   ElytraFlightControllerSettings settings,
@@ -88,6 +89,16 @@ public final class ElytraFlightController {
         ticksElapsed++;
         stateTicks++;
 
+        if (!input.inSchematicBounds()) {
+            outOfBoundsTicks++;
+        } else {
+            outOfBoundsTicks = 0;
+        }
+
+        if (outOfBoundsTicks >= 20 && state != ElytraFlightState.RECOVERY) {
+            requestRecovery(state, FlightFailureReason.SCHEMATIC_BOUNDS_VIOLATION);
+        }
+
         if (state == ElytraFlightState.IDLE) {
             transitionTo(ElytraFlightState.TAKEOFF);
         }
@@ -98,13 +109,13 @@ public final class ElytraFlightController {
             case LANE_FOLLOWING -> handleLaneFollowing(input);
             case APPROACH_ENDPOINT -> handleEndpointApproach(input);
             case SOFT_TURN -> handleSoftTurn(input);
-            case RECOVERY -> handleRecovery();
+            case RECOVERY -> handleRecovery(input);
             default -> {
             }
         }
 
         if (!isTerminal()) {
-            lastCommand = buildControlCommand(input.playerPosition());
+            lastCommand = buildControlCommand(input);
         } else {
             lastCommand = FlightControlCommand.idle();
         }
@@ -148,7 +159,7 @@ public final class ElytraFlightController {
                 settings.laneEntryCenterTolerance()
         );
 
-        if (plan.aligned()) {
+        if (plan.aligned() && input.inLaneCorridor()) {
             transitionTo(ElytraFlightState.LANE_FOLLOWING);
             return;
         }
@@ -166,6 +177,11 @@ public final class ElytraFlightController {
             sustainedAltitudeViolationTicks = 0;
         }
 
+        if (!input.inLaneCorridor()) {
+            requestRecovery(ElytraFlightState.LANE_FOLLOWING, FlightFailureReason.LANE_CORRIDOR_VIOLATION);
+            return;
+        }
+
         if (sustainedAltitudeViolationTicks >= 20) {
             requestRecovery(ElytraFlightState.LANE_FOLLOWING, FlightFailureReason.ALTITUDE_BAND_VIOLATION);
             return;
@@ -178,6 +194,11 @@ public final class ElytraFlightController {
     }
 
     private void handleEndpointApproach(FlightTickInput input) {
+        if (!input.inLaneCorridor()) {
+            requestRecovery(ElytraFlightState.APPROACH_ENDPOINT, FlightFailureReason.LANE_CORRIDOR_VIOLATION);
+            return;
+        }
+
         if (distanceToLaneEndpoint(input.playerPosition()) <= lane.endpointTolerance()) {
             if (input.nextLane().isPresent()) {
                 TurnPlanner.TurnPlan turnPlan = turnPlanner.planSerpentineTurn(lane, input.nextLane().get(), input.playerPosition());
@@ -204,11 +225,10 @@ public final class ElytraFlightController {
             return;
         }
 
-        // Skeleton behavior: reaching this state indicates a valid turn plan exists.
         transitionTo(ElytraFlightState.COMPLETE);
     }
 
-    private void handleRecovery() {
+    private void handleRecovery(FlightTickInput input) {
         FlightRecoveryHandler.RecoveryDecision decision = recoveryHandler.evaluate(
                 recoveryAttempts,
                 settings.maxRecoveryAttempts(),
@@ -220,7 +240,14 @@ public final class ElytraFlightController {
             return;
         }
 
-        transitionTo(recoveryTargetState);
+        if (input.fallFlying() && input.inSchematicBounds() && input.inLaneCorridor()) {
+            transitionTo(recoveryTargetState);
+            return;
+        }
+
+        if (stateTicks >= settings.recoveryTimeoutTicks()) {
+            fail(FlightFailureReason.RECOVERY_TIMEOUT);
+        }
     }
 
     private void requestRecovery(ElytraFlightState targetState, FlightFailureReason reason) {
@@ -234,59 +261,73 @@ public final class ElytraFlightController {
         return playerPosition.distanceTo(toWorldCenter(lane.endPoint()));
     }
 
-    private FlightControlCommand buildControlCommand(Vec3d worldPlayerPosition) {
+    private FlightControlCommand buildControlCommand(FlightTickInput input) {
+        Vec3d worldPlayerPosition = input.playerPosition();
         return switch (state) {
-            case TAKEOFF -> buildTakeoffCommand(worldPlayerPosition);
-            case LANE_ENTRY_ALIGNMENT -> buildLaneCommand(worldPlayerPosition, holdPositionTarget(worldPlayerPosition), true, false);
-            case LANE_FOLLOWING -> buildLaneCommand(worldPlayerPosition, progressTargetWorldPosition(worldPlayerPosition, 8.0), false);
-            case APPROACH_ENDPOINT -> buildLaneCommand(worldPlayerPosition, toWorldCenter(lane.endPoint()), false);
-            case SOFT_TURN -> buildLaneCommand(worldPlayerPosition, toWorldCenter(lane.endPoint()), false);
-            case RECOVERY -> buildRecoveryCommand(worldPlayerPosition);
+            case TAKEOFF -> buildTakeoffCommand(input);
+            case LANE_ENTRY_ALIGNMENT -> buildLaneCommand(input, holdPositionTarget(worldPlayerPosition), true, false);
+            case LANE_FOLLOWING -> buildLaneCommand(input, progressTargetWorldPosition(worldPlayerPosition, 10.0), false);
+            case APPROACH_ENDPOINT -> buildLaneCommand(input, toWorldCenter(lane.endPoint()), false);
+            case SOFT_TURN -> buildLaneCommand(input, toWorldCenter(lane.endPoint()), false);
+            case RECOVERY -> buildRecoveryCommand(input);
             default -> FlightControlCommand.idle();
         };
     }
 
-    private FlightControlCommand buildTakeoffCommand(Vec3d worldPlayerPosition) {
+    private FlightControlCommand buildTakeoffCommand(FlightTickInput input) {
+        Vec3d worldPlayerPosition = input.playerPosition();
         Vec3d entry = toWorldCenter(lane.entryPoint());
         float yaw = yawTo(worldPlayerPosition, entry);
-        float pitch = -28.0f;
-        return new FlightControlCommand(yaw, pitch, true, false, false, false, true, false, true);
+        float pitch = input.onGround() ? -25.0f : -38.0f;
+        boolean jump = true;
+        boolean sneak = false;
+        return new FlightControlCommand(yaw, pitch, true, false, false, false, jump, sneak, true);
     }
 
-    private FlightControlCommand buildRecoveryCommand(Vec3d worldPlayerPosition) {
-        Vec3d recoveryTarget = progressTargetWorldPosition(worldPlayerPosition, 4.0);
-        return buildLaneCommand(worldPlayerPosition, recoveryTarget, true);
+    private FlightControlCommand buildRecoveryCommand(FlightTickInput input) {
+        Vec3d recoveryTarget = progressTargetWorldPosition(input.playerPosition(), 6.0);
+        Vec3d boundedRecoveryTarget = input.corridorCenterTarget().orElse(recoveryTarget);
+        return buildLaneCommand(input, boundedRecoveryTarget, true);
     }
 
-    private FlightControlCommand buildLaneCommand(Vec3d worldPlayerPosition, Vec3d worldTarget, boolean aggressiveClimb) {
-        return buildLaneCommand(worldPlayerPosition, worldTarget, aggressiveClimb, true);
+    private FlightControlCommand buildLaneCommand(FlightTickInput input, Vec3d worldTarget, boolean aggressiveClimb) {
+        return buildLaneCommand(input, worldTarget, aggressiveClimb, true);
     }
 
-    private FlightControlCommand buildLaneCommand(Vec3d worldPlayerPosition,
+    private FlightControlCommand buildLaneCommand(FlightTickInput input,
                                                   Vec3d worldTarget,
                                                   boolean aggressiveClimb,
                                                   boolean allowForwardMotion) {
+        Vec3d worldPlayerPosition = input.playerPosition();
         double laneYaw = laneHeadingYaw();
         double lateralOffset = laneLateralOffset(worldPlayerPosition);
         double forwardError = forwardDistance(worldPlayerPosition, worldTarget);
         double altitudeError = altitudeError(worldPlayerPosition.y);
 
-        double lateralIntent = clamp(lateralOffset * 0.9, -1.0, 1.0);
-        boolean left = lateralIntent > 0.18;
-        boolean right = lateralIntent < -0.18;
-
-        boolean forward = allowForwardMotion && forwardError > 0.35;
-        boolean back = allowForwardMotion && forwardError < -0.45;
-
-        double verticalIntent = clamp(altitudeError * 0.22, -1.0, 1.0);
-        if (aggressiveClimb && worldPlayerPosition.y < settings.minAltitude() + 2.0) {
-            verticalIntent = Math.max(verticalIntent, 0.85);
+        if (!input.inSchematicBounds() && input.corridorCenterTarget().isPresent()) {
+            laneYaw = yawTo(worldPlayerPosition, input.corridorCenterTarget().get());
         }
-        boolean jump = verticalIntent > 0.12;
-        boolean sneak = verticalIntent < -0.12;
 
-        float yaw = (float) clamp(laneYaw + lateralIntent * 18.0, -180.0, 180.0);
-        float pitch = (float) clamp(-6.0 - verticalIntent * 25.0, -45.0, 35.0);
+        double lateralIntent = clamp(lateralOffset * 0.85, -1.0, 1.0);
+        boolean left = lateralIntent > 0.15;
+        boolean right = lateralIntent < -0.15;
+
+        boolean forward = allowForwardMotion && forwardError > 0.2;
+        boolean back = allowForwardMotion && forwardError < -0.5;
+
+        double verticalIntent = clamp(altitudeError * 0.20, -1.0, 1.0);
+        if (aggressiveClimb && worldPlayerPosition.y < settings.minAltitude() + 2.0) {
+            verticalIntent = Math.max(verticalIntent, 0.9);
+        }
+        if (worldPlayerPosition.y > settings.maxAltitude() + 1.5) {
+            verticalIntent = Math.min(verticalIntent, -0.7);
+        }
+
+        boolean jump = verticalIntent > 0.08;
+        boolean sneak = verticalIntent < -0.08;
+
+        float yaw = normalizeYaw((float) (laneYaw + lateralIntent * 24.0));
+        float pitch = (float) clamp(-7.0 - verticalIntent * 28.0, -50.0, 40.0);
 
         return new FlightControlCommand(yaw, pitch, forward, back, left, right, jump, sneak, true);
     }
@@ -320,7 +361,18 @@ public final class ElytraFlightController {
 
     private float yawTo(Vec3d from, Vec3d to) {
         Vec3d delta = to.subtract(from);
-        return (float) (Math.toDegrees(Math.atan2(delta.z, delta.x)) - 90.0f);
+        return normalizeYaw((float) (Math.toDegrees(Math.atan2(delta.z, delta.x)) - 90.0f));
+    }
+
+    private static float normalizeYaw(float yaw) {
+        float normalized = yaw % 360.0f;
+        if (normalized >= 180.0f) {
+            normalized -= 360.0f;
+        }
+        if (normalized < -180.0f) {
+            normalized += 360.0f;
+        }
+        return normalized;
     }
 
     private static double clamp(double value, double min, double max) {
@@ -382,14 +434,21 @@ public final class ElytraFlightController {
         ABOVE
     }
 
-    public record FlightTickInput(Vec3d playerPosition, boolean fallFlying, Optional<BuildLane> nextLane) {
+    public record FlightTickInput(Vec3d playerPosition,
+                                  boolean fallFlying,
+                                  boolean onGround,
+                                  boolean inSchematicBounds,
+                                  boolean inLaneCorridor,
+                                  Optional<Vec3d> corridorCenterTarget,
+                                  Optional<BuildLane> nextLane) {
         public FlightTickInput {
             Objects.requireNonNull(playerPosition, "playerPosition");
+            Objects.requireNonNull(corridorCenterTarget, "corridorCenterTarget");
             Objects.requireNonNull(nextLane, "nextLane");
         }
 
         public static FlightTickInput currentLaneOnly(Vec3d playerPosition, boolean fallFlying) {
-            return new FlightTickInput(playerPosition, fallFlying, Optional.empty());
+            return new FlightTickInput(playerPosition, fallFlying, false, true, true, Optional.empty(), Optional.empty());
         }
     }
 

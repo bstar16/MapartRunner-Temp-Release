@@ -9,7 +9,9 @@ public final class FlightRecoveryHandler {
         if (reason == FlightFailureReason.TAKEOFF_TIMEOUT
                 || reason == FlightFailureReason.ENTRY_ALIGNMENT_TIMEOUT
                 || reason == FlightFailureReason.ALTITUDE_BAND_VIOLATION
-                || reason == FlightFailureReason.ENDPOINT_APPROACH_TIMEOUT) {
+                || reason == FlightFailureReason.ENDPOINT_APPROACH_TIMEOUT
+                || reason == FlightFailureReason.LANE_CORRIDOR_VIOLATION
+                || reason == FlightFailureReason.SCHEMATIC_BOUNDS_VIOLATION) {
             return new RecoveryDecision(true, reason);
         }
 
