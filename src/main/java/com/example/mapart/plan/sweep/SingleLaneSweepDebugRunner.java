@@ -113,7 +113,7 @@ public final class SingleLaneSweepDebugRunner {
         Vec3d relativePlayerPos = toRelative(worldPlayerPos, activeSession.getOrigin());
         boolean inBounds = activeEnvelope.inSchematicBounds(worldPlayerPos, ENVELOPE_MARGIN);
         boolean inCorridor = activeLaneCorridor.contains(worldPlayerPos);
-        Optional<Vec3d> corridorTarget = Optional.of(activeLaneCorridor.clampCenterlineTarget(worldPlayerPos));
+        Optional<Vec3d> corridorTarget = Optional.of(laneCenterlineTarget(worldPlayerPos));
 
         activeController.tick(SweepPassController.PassTickInput.withWorldAndRelative(
                 worldPlayerPos,
@@ -208,6 +208,27 @@ public final class SingleLaneSweepDebugRunner {
 
     private static Vec3d toRelative(Vec3d world, BlockPos origin) {
         return new Vec3d(world.x - origin.getX(), world.y - origin.getY(), world.z - origin.getZ());
+    }
+
+    private Vec3d laneCenterlineTarget(Vec3d worldPlayerPos) {
+        if (activeSession == null || activeLane == null || activeLaneCorridor == null) {
+            return worldPlayerPos;
+        }
+        BlockPos origin = activeSession.getOrigin();
+        double centerX;
+        double centerZ;
+        if (activeLane.axis() == LaneAxis.X) {
+            centerX = clamp(worldPlayerPos.x, origin.getX() + activeLane.minProgress() + 0.5, origin.getX() + activeLane.maxProgress() + 0.5);
+            centerZ = origin.getZ() + activeLane.fixedCoordinate() + 0.5;
+        } else {
+            centerX = origin.getX() + activeLane.fixedCoordinate() + 0.5;
+            centerZ = clamp(worldPlayerPos.z, origin.getZ() + activeLane.minProgress() + 0.5, origin.getZ() + activeLane.maxProgress() + 0.5);
+        }
+        return activeLaneCorridor.clampCenterlineTarget(new Vec3d(centerX, worldPlayerPos.y, centerZ));
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private void applyFlightControls(MinecraftClient client) {
