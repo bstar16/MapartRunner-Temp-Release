@@ -8,7 +8,6 @@ import com.example.mapart.persistence.ProgressStore;
 import com.example.mapart.plan.PlanLoaderRegistry;
 import com.example.mapart.plan.compare.PlacementStatusResolver;
 import com.example.mapart.plan.loaders.SchemNbtLoader;
-import com.example.mapart.plan.sweep.SingleLaneSweepDebugRunner;
 import com.example.mapart.plan.state.BuildCoordinator;
 import com.example.mapart.plan.state.BuildPlanService;
 import com.example.mapart.plan.state.WorldPlacementResolver;
@@ -49,8 +48,7 @@ public class MapArtClientMod implements ClientModInitializer {
         BaritoneFacade baritoneFacade = BaritoneFacadeFactory.create();
         BuildCoordinator buildCoordinator = new BuildCoordinator(new WorldPlacementResolver(), configStore, progressStore, supplyStore, baritoneFacade);
         BuildPlanService buildPlanService = new BuildPlanService(loaderRegistry, buildCoordinator);
-        SingleLaneSweepDebugRunner singleLaneSweepDebugRunner = new SingleLaneSweepDebugRunner();
-        MapArtRuntime.initialize(buildPlanService, configStore, progressStore, settingsStore, supplyStore, baritoneFacade, debugReporter, singleLaneSweepDebugRunner);
+        MapArtRuntime.initialize(buildPlanService, configStore, progressStore, settingsStore, supplyStore, baritoneFacade, debugReporter);
         KeyBinding panicKeyBinding = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 PANIC_KEY_TRANSLATION,
                 InputUtil.Type.KEYSYM,
@@ -59,9 +57,7 @@ public class MapArtClientMod implements ClientModInitializer {
         ));
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            dispatcher.register(MapArtCommand.create(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
-            dispatcher.register(MapArtCommand.createAlias(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
-            dispatcher.register(MapArtCommand.createRunnerAlias(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade));
+            dispatcher.register(MapArtCommand.create(buildPlanService, settingsStore, supplyStore, supplyInteractionTracker));
         });
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (panicKeyBinding.wasPressed()) {
@@ -75,7 +71,6 @@ public class MapArtClientMod implements ClientModInitializer {
 
             int clientTimerSpeed = settingsStore.current().clientTimerSpeed();
             for (int iteration = 0; iteration < clientTimerSpeed; iteration++) {
-                singleLaneSweepDebugRunner.tick(client);
                 BuildCoordinator.AssistedStepResult assistedStep = buildCoordinator.tickAssisted(client);
                 if (!assistedStep.didWork()) {
                     break;
@@ -96,7 +91,7 @@ public class MapArtClientMod implements ClientModInitializer {
         WorldRenderEvents.AFTER_TRANSLUCENT.register(new SchematicOverlayRenderer(resolver));
 
         debugReporter.logToFile("Debug log file: " + debugReporter.logPath().toAbsolutePath());
-        MapArtMod.LOGGER.info("Initialized mapart client command pipeline with /mapart, /maprunner, and /mapartrunner");
+        MapArtMod.LOGGER.info("Initialized mapart client command pipeline with /mapart");
         MapArtMod.LOGGER.info("Baritone facade backend: {}", baritoneFacade.getClass().getSimpleName());
     }
 }

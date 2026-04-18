@@ -1,16 +1,11 @@
 package com.example.mapart.command;
 
-import com.example.mapart.baritone.BaritoneFacade;
 import com.example.mapart.plan.BuildPlan;
 import com.example.mapart.plan.Placement;
 import com.example.mapart.plan.state.BuildCoordinator;
 import com.example.mapart.plan.state.BuildPlanService;
 import com.example.mapart.plan.state.BuildSession;
-import com.example.mapart.plan.sweep.LeftoverTracker;
-import com.example.mapart.plan.sweep.SingleLaneSweepDebugRunner;
-import com.example.mapart.plan.sweep.SweepPassResult;
 import com.example.mapart.runtime.ClientTimerController;
-import com.example.mapart.runtime.MapArtRuntime;
 import com.example.mapart.settings.MapartSettings;
 import com.example.mapart.settings.MapartSettingsStore;
 import com.example.mapart.plan.state.RefillStatus;
@@ -38,8 +33,6 @@ import com.example.mapart.util.MaterialCountFormatter;
 
 public final class MapArtCommand {
     public static final String PRIMARY_COMMAND = "mapart";
-    public static final String LEGACY_ALIAS = "maprunner";
-    public static final String MOD_NAME_ALIAS = "mapartrunner";
 
     private MapArtCommand() {
     }
@@ -48,30 +41,9 @@ public final class MapArtCommand {
             BuildPlanService planService,
             MapartSettingsStore settingsStore,
             SupplyStore supplyStore,
-            SupplyInteractionTracker supplyInteractionTracker,
-            BaritoneFacade baritoneFacade
+            SupplyInteractionTracker supplyInteractionTracker
     ) {
-        return createForName(PRIMARY_COMMAND, planService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade);
-    }
-
-    public static LiteralArgumentBuilder<FabricClientCommandSource> createAlias(
-            BuildPlanService planService,
-            MapartSettingsStore settingsStore,
-            SupplyStore supplyStore,
-            SupplyInteractionTracker supplyInteractionTracker,
-            BaritoneFacade baritoneFacade
-    ) {
-        return createForName(LEGACY_ALIAS, planService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade);
-    }
-
-    public static LiteralArgumentBuilder<FabricClientCommandSource> createRunnerAlias(
-            BuildPlanService planService,
-            MapartSettingsStore settingsStore,
-            SupplyStore supplyStore,
-            SupplyInteractionTracker supplyInteractionTracker,
-            BaritoneFacade baritoneFacade
-    ) {
-        return createForName(MOD_NAME_ALIAS, planService, settingsStore, supplyStore, supplyInteractionTracker, baritoneFacade);
+        return createForName(PRIMARY_COMMAND, planService, settingsStore, supplyStore, supplyInteractionTracker);
     }
 
     private static LiteralArgumentBuilder<FabricClientCommandSource> createForName(
@@ -79,8 +51,7 @@ public final class MapArtCommand {
             BuildPlanService planService,
             MapartSettingsStore settingsStore,
             SupplyStore supplyStore,
-            SupplyInteractionTracker supplyInteractionTracker,
-            BaritoneFacade baritoneFacade
+            SupplyInteractionTracker supplyInteractionTracker
     ) {
         return ClientCommandManager.literal(commandName)
                 .then(ClientCommandManager.literal("load")
@@ -204,47 +175,8 @@ public final class MapArtCommand {
                                 .executes(context -> setClientTimerSpeed(
                                         context.getSource(),
                                         DoubleArgumentType.getDouble(context, "multiplier")
-                                ))))
-                .then(ClientCommandManager.literal("debug")
-                        .then(ClientCommandManager.literal("goto")
-                                .then(ClientCommandManager.argument("x", IntegerArgumentType.integer())
-                                        .then(ClientCommandManager.argument("y", IntegerArgumentType.integer())
-                                                .then(ClientCommandManager.argument("z", IntegerArgumentType.integer())
-                                                        .executes(context -> debugGoto(
-                                                                context.getSource(),
-                                                                baritoneFacade,
-                                                                IntegerArgumentType.getInteger(context, "x"),
-                                                                IntegerArgumentType.getInteger(context, "y"),
-                                                                IntegerArgumentType.getInteger(context, "z")
-                                                        ))))))
-                        .then(ClientCommandManager.literal("cancel")
-                                .executes(context -> debugCancel(context.getSource(), baritoneFacade)))
-                        .then(ClientCommandManager.literal("busy")
-                                .executes(context -> debugBusy(context.getSource(), baritoneFacade)))
-                        .then(ClientCommandManager.literal("secondlast")
-                                .executes(context -> {
-                                    Optional<String> error = planService.coordinator().debugSkipToSecondLastPlacement();
-                                    if (error.isPresent()) {
-                                        context.getSource().sendError(Text.literal(error.get()));
-                                        return 0;
-                                    }
+                                )))
 
-                                    context.getSource().sendFeedback(Text.literal("Debug: moved progress to the second last placement. Use /"
-                                            + commandName + " next to continue."));
-                                    return 1;
-                                }))
-                        .then(ClientCommandManager.literal("sweep-single-lane")
-                                .then(ClientCommandManager.literal("start")
-                                        .then(ClientCommandManager.argument("lane", IntegerArgumentType.integer(0))
-                                                .executes(context -> debugSweepSingleLaneStart(
-                                                        context.getSource(),
-                                                        planService,
-                                                        IntegerArgumentType.getInteger(context, "lane")
-                                                ))))
-                                .then(ClientCommandManager.literal("status")
-                                        .executes(context -> debugSweepSingleLaneStatus(context.getSource())))
-                                .then(ClientCommandManager.literal("stop")
-                                        .executes(context -> debugSweepSingleLaneStop(context.getSource()))))
                 );
     }
 
@@ -289,103 +221,6 @@ public final class MapArtCommand {
 
     public static BuildCoordinator.PanicResult triggerPanic(BuildPlanService planService) {
         return planService.coordinator().panicUnload();
-    }
-
-    private static int debugGoto(FabricClientCommandSource source, BaritoneFacade baritoneFacade, int x, int y, int z) {
-        BaritoneFacade.CommandResult result = baritoneFacade.goTo(new BlockPos(x, y, z));
-        if (!result.success()) {
-            source.sendError(Text.literal(result.message()));
-            return 0;
-        }
-
-        source.sendFeedback(Text.literal(result.message()));
-        return 1;
-    }
-
-    private static int debugCancel(FabricClientCommandSource source, BaritoneFacade baritoneFacade) {
-        BaritoneFacade.CommandResult result = baritoneFacade.cancel();
-        if (!result.success()) {
-            source.sendError(Text.literal(result.message()));
-            return 0;
-        }
-
-        source.sendFeedback(Text.literal(result.message()));
-        return 1;
-    }
-
-    private static int debugBusy(FabricClientCommandSource source, BaritoneFacade baritoneFacade) {
-        source.sendFeedback(Text.literal("Baritone busy: " + (baritoneFacade.isBusy() ? "yes" : "no")));
-        return 1;
-    }
-
-    private static int debugSweepSingleLaneStart(FabricClientCommandSource source, BuildPlanService planService, int laneIndex) {
-        SingleLaneSweepDebugRunner runner = MapArtRuntime.singleLaneSweepDebugRunner();
-        if (runner == null) {
-            source.sendError(Text.literal("Sweep debug runner is unavailable."));
-            return 0;
-        }
-
-        Optional<BuildSession> session = planService.currentSession();
-        if (session.isEmpty()) {
-            source.sendError(Text.literal("No build plan loaded."));
-            return 0;
-        }
-
-        Optional<String> error = runner.start(session.get(), laneIndex);
-        if (error.isPresent()) {
-            source.sendError(Text.literal(error.get()));
-            return 0;
-        }
-        source.sendFeedback(Text.literal("Started debug single-lane elytra sweep on lane " + laneIndex + "."));
-        return 1;
-    }
-
-    private static int debugSweepSingleLaneStatus(FabricClientCommandSource source) {
-        SingleLaneSweepDebugRunner runner = MapArtRuntime.singleLaneSweepDebugRunner();
-        if (runner == null) {
-            source.sendError(Text.literal("Sweep debug runner is unavailable."));
-            return 0;
-        }
-
-        Optional<SweepPassResult> result = runner.activeResult();
-        if (result.isEmpty()) {
-            result = runner.lastResult();
-        }
-        if (result.isEmpty()) {
-            source.sendFeedback(Text.literal("No single-lane debug sweep run has been started yet."));
-            return 0;
-        }
-
-        SweepPassResult sweep = result.get();
-        source.sendFeedback(Text.literal("Single-lane sweep state=" + sweep.finalState()
-                + ", ticks=" + sweep.ticksElapsed()
-                + ", success=" + sweep.successCount()
-                + ", missed=" + sweep.missedCount()
-                + ", deferred=" + sweep.deferredCount()
-                + ", leftovers=" + sweep.leftoverPlacementIndices().size()));
-        if (!sweep.flightFailureReason().isEmpty()) {
-            source.sendFeedback(Text.literal("Flight failure reason: " + sweep.flightFailureReason().get()));
-        }
-        if (!sweep.leftoverRecords().isEmpty()) {
-            LeftoverTracker.LeftoverRecord record = sweep.leftoverRecords().getFirst();
-            source.sendFeedback(Text.literal("Example leftover #" + record.placementIndex() + " reasons=" + record.reasons()));
-        }
-        return 1;
-    }
-
-    private static int debugSweepSingleLaneStop(FabricClientCommandSource source) {
-        SingleLaneSweepDebugRunner runner = MapArtRuntime.singleLaneSweepDebugRunner();
-        if (runner == null) {
-            source.sendError(Text.literal("Sweep debug runner is unavailable."));
-            return 0;
-        }
-        Optional<String> error = runner.stop();
-        if (error.isPresent()) {
-            source.sendError(Text.literal(error.get()));
-            return 0;
-        }
-        source.sendFeedback(Text.literal("Stopped debug single-lane elytra sweep."));
-        return 1;
     }
 
     private static int setOrigin(
