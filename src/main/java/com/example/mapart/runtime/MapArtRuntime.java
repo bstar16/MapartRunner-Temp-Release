@@ -2,7 +2,6 @@ package com.example.mapart.runtime;
 
 import com.example.mapart.persistence.ConfigStore;
 import com.example.mapart.persistence.ProgressStore;
-import com.example.mapart.plan.sweep.SingleLaneSweepDebugRunner;
 import com.example.mapart.plan.state.BuildPlanService;
 import com.example.mapart.baritone.BaritoneFacade;
 import com.example.mapart.settings.MapartSettingsStore;
@@ -16,7 +15,6 @@ public final class MapArtRuntime {
     private static SupplyStore supplyStore;
     private static BaritoneFacade baritoneFacade;
     private static DebugReporter debugReporter;
-    private static SingleLaneSweepDebugRunner singleLaneSweepDebugRunner;
 
     private MapArtRuntime() {
     }
@@ -28,8 +26,7 @@ public final class MapArtRuntime {
             MapartSettingsStore settings,
             SupplyStore supplies,
             BaritoneFacade facade,
-            DebugReporter reporter,
-            SingleLaneSweepDebugRunner singleLaneRunner
+            DebugReporter reporter
     ) {
         buildPlanService = planService;
         configStore = config;
@@ -38,7 +35,6 @@ public final class MapArtRuntime {
         supplyStore = supplies;
         baritoneFacade = facade;
         debugReporter = reporter;
-        singleLaneSweepDebugRunner = singleLaneRunner;
     }
 
     public static BuildPlanService buildPlanService() {
@@ -61,7 +57,4 @@ public final class MapArtRuntime {
         return debugReporter;
     }
 
-    public static SingleLaneSweepDebugRunner singleLaneSweepDebugRunner() {
-        return singleLaneSweepDebugRunner;
-    }
 }
