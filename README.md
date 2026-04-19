@@ -1,11 +1,14 @@
+
 # MapArt - Fabric 1.21.4 Mod
 
-A Minecraft Fabric mod for Minecraft 1.21.4
+A Minecraft Fabric mod for Minecraft 1.21.4 designed to automate the process of making mapart. Currently this release will not be updated as id prefer to code it myself and not have to deal with issues with a very minimal release which is what this is. **I will provide help and if you find fatal errors/crashes that prevent usage of this or you have a suggestion/recommendation, then feel free to make an issue or tell me on discord @bstarr otherwise no further public updates will be made so keep that in mind** 
+
+In the meantime im going to continue developing this on my own until im satisfied its reached my goals or atleast works enough to be worth using over other methods/manual mapart making. This mod requires no major setup which is the main goal of this to just be a portable mapart bot - recommended to use on servers with a dupe, however carpets work fine since most servers allow carpet duplication.
 
 ## Development Setup
 
 ### Prerequisites
-- JDK 21 or higher
+- JDK 21 or higher 
 - Git
 
 ### Getting Started
@@ -32,79 +35,25 @@ The compiled mod JAR will be located in `build/libs/`.
 ### IDE Setup
 
 #### IntelliJ IDEA
-1. Open the project in IntelliJ
-2. Run `./gradlew idea` to generate IDE configurations
-3. Reload the project
-
-#### Eclipse
-1. Run `./gradlew eclipse` to generate IDE configurations
-2. Import the project as an existing project in Eclipse
-
-#### VS Code
-1. Install the "Extension Pack for Java" extension
-2. Run `./gradlew build` to generate necessary files
-3. Open the project in VS Code
-
-### Project Structure
-
-```
-src/
-├── main/
-│   ├── java/
-│   │   └── com/example/mapart/
-│   │       └── MapArtMod.java          # Main mod entry point
-│   └── resources/
-│       ├── fabric.mod.json              # Mod metadata
-│       ├── mapart.mixins.json           # Mixin configuration
-│       └── assets/mapart/               # Game assets (textures, sounds, etc.)
-build.gradle                             # Gradle build configuration
-gradle.properties                        # Project properties and versions
-settings.gradle                          # Gradle settings
-```
-
-## Building and Running
-
-**Build the mod:**
-```bash
-./gradlew build
-```
-
-**Development build:**
-```bash
-./gradlew genSources
-./gradlew build
-```
+1. Import project
+2. Wait for gradle to import
+3. Press the build button in gradle
+4. Compiled jar in `build/libs/` **don't pick the sources .jar**
 
 ## In-Game Commands
+VVVVVVVVVV
+- `/mapart` 
 
-The mod registers these command roots:
-- `/mapart` (primary)
-- `/maprunner` (legacy alias)
-- `/mapartrunner` (mod-name alias)
+Available subcommands ( theres more but ill explain these because some are straightforward ) :
+- `load <path>` e.g `/mapart load bedrock.nbt` ( place the schematic in the games folder for easier typing)
+- `info` - will print the loaded schematics info useful for materials - will show total + X stacks + X blocks for each item
+- `unload` - basically reset
+- `panic` (client-side emergency stop + unload - Can be binded in keybinds )
+- `clienttimerspeed <multiplier>` (sets how many assisted automation passes run each client tick; useful for testing - wouldn't use online unless server allows timer)
+- `supply` `add <name>` - will prompt you to right click a container to set a supply point - `clear` clears the list but kinda broken haven't looked further into the issue but does work? `list` - shows supplys with coords and a number/id `remove <id>` add the id to remove it from the list
+- `setorigin` you cannot start without an origin point so stand where you want it and issue the command or alternatively put the coords in after e.g `/mapart setorigin x y z`
+- `settings` - will list all the settings and their values `set <setting> <value>` some are boolean, some are values so check beforehand - note `overlaycurrentregiononly false` will render the entire overlay rather then the current chunk/region
 
-Available subcommands:
-- `load <path>` (OP level 2 required)
-- `info`
-- `unload` (OP level 2 required)
-- `panic` (client-side emergency stop + unload)
-- `clienttimerspeed <multiplier>` (sets how many assisted automation passes run each client tick; useful for testing)
-
-Example:
-```mcfunction
-/mapart load /absolute/path/to/build.schem or .nbt
-/mapart info
-/mapart clienttimerspeed 2.0
-/mapart unload
-/mapart panic
-```
-
-## Panic Button
-
-The mod now exposes a client keybind named **MapArt → Panic unload** in the Minecraft Controls menu.
-
-- Bind it to any keyboard or mouse button you want.
-- Pressing it immediately cancels active automation, closes any open supply container UI, and unloads the current plan.
-- The same action is also available as `/mapart panic`.
 
 If `/mapart` is unknown in game:
 - make sure the built JAR from `build/libs/` is in your server/client `mods/` folder
@@ -114,36 +63,10 @@ If `/mapart` is unknown in game:
 
 ## Baritone Integration
 
-MapArtRunner integrates with Baritone through `baritone-api-fabric` at runtime.
+MapArtRunner integrates with [Baritone](https://github.com/cabaletta/baritone) through `baritone-api-fabric` at runtime.
 
 - Install a Baritone jar that exposes the `baritone-api-fabric` API for your exact Minecraft version (1.21.4 in this project).
 - If Baritone is missing or the API is mismatched, `/mapart start` now reports a friendly in-game error and assisted movement is disabled until a compatible Baritone jar is installed.
-
-## Troubleshooting
-
-If the standard commands fail even when typed correctly, check the items below.
-
-1. **Verify Java version (must be 21+):**
-   ```bash
-   java -version
-   ```
-   If this shows a lower version, install JDK 21 and set `JAVA_HOME` to that installation.
-
-2. **Linux/macOS permission error (`./gradlew: Permission denied`):**
-   ```bash
-   chmod +x gradlew
-   ./gradlew build
-   ```
-
-3. **Use the correct Gradle wrapper command for your platform:**
-   - Linux/macOS: `./gradlew build`
-   - Windows PowerShell/CMD: `gradlew.bat build`
-
-4. **Refresh Gradle cache if dependencies are corrupted:**
-   ```bash
-   ./gradlew --stop
-   ./gradlew --refresh-dependencies build
-   ```
 
 ## Mod Details
 
