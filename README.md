@@ -1,6 +1,8 @@
 
 # MapArt - Fabric 1.21.4 Mod
 
+this entire project is being made with codex
+
 A Minecraft Fabric mod for Minecraft 1.21.4 designed to automate the process of making mapart. Currently this release will not be updated as id prefer to code it myself and not have to deal with issues with a very minimal release which is what this is. **I will provide help and if you find fatal errors/crashes that prevent usage of this or you have a suggestion/recommendation, then feel free to make an issue or tell me on discord @bstarr otherwise no further public updates will be made so keep that in mind** 
 
 In the meantime im going to continue developing this on my own until im satisfied its reached my goals or atleast works enough to be worth using over other methods/manual mapart making. This mod requires no major setup which is the main goal of this to just be a portable mapart bot - recommended to use on servers with a dupe, however carpets work fine since most servers allow carpet duplication.
