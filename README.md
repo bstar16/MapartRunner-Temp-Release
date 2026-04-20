@@ -1,9 +1,9 @@
 
-# MapArt - Fabric 1.21.4 Mod
+# MapArt - Fabric 1.21.11 Mod
 
 this entire project is being made with codex
 
-A Minecraft Fabric mod for Minecraft 1.21.4 designed to automate the process of making mapart. Currently this release will not be updated as id prefer to code it myself and not have to deal with issues with a very minimal release which is what this is. **I will provide help and if you find fatal errors/crashes that prevent usage of this or you have a suggestion/recommendation, then feel free to make an issue or tell me on discord @bstarr otherwise no further public updates will be made so keep that in mind** 
+A Minecraft Fabric mod for Minecraft 1.21.11 designed to automate the process of making mapart. Currently this release will not be updated as id prefer to code it myself and not have to deal with issues with a very minimal release which is what this is. **I will provide help and if you find fatal errors/crashes that prevent usage of this or you have a suggestion/recommendation, then feel free to make an issue or tell me on discord @bstarr otherwise no further public updates will be made so keep that in mind** 
 
 In the meantime im going to continue developing this on my own until im satisfied its reached my goals or atleast works enough to be worth using over other methods/manual mapart making. This mod requires no major setup which is the main goal of this to just be a portable mapart bot - recommended to use on servers with a dupe, however carpets work fine since most servers allow carpet duplication.
 
@@ -67,14 +67,14 @@ If `/mapart` is unknown in game:
 
 MapArtRunner integrates with [Baritone](https://github.com/cabaletta/baritone) through `baritone-api-fabric` at runtime.
 
-- Install a Baritone jar that exposes the `baritone-api-fabric` API for your exact Minecraft version (1.21.4 in this project).
+- Install a Baritone jar that exposes the `baritone-api-fabric` API for your exact Minecraft version (1.21.11 in this project).
 - If Baritone is missing or the API is mismatched, `/mapart start` now reports a friendly in-game error and assisted movement is disabled until a compatible Baritone jar is installed.
 
 ## Mod Details
 
-- **Minecraft Version:** 1.21.4
+- **Minecraft Version:** 1.21.11
 - **Fabric Loader:** 0.16.5
-- **Fabric API:** 0.104.0+1.21.1
+- **Fabric API:** 0.141.3+1.21.11
 - **Java Version:** 21
 
 ## License
