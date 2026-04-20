@@ -18,7 +18,7 @@ In the meantime im going to continue developing this on my own until im satisfie
 1. **Clone and navigate to the project:**
    ```bash
    git clone <your-repo-url>
-   cd MapArtrunner
+   cd <project-folder>
    ```
 
 2. **Generate the Minecraft development environment:**
