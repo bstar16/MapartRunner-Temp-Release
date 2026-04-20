@@ -12,7 +12,14 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.render.RenderLayers;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.render.VertexRendering;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.shape.VoxelShapes;
 
 import java.util.HashSet;
 import java.util.List;
@@ -68,11 +75,28 @@ public class SchematicOverlayRenderer implements WorldRenderEvents.EndMain {
             return true;
         });
 
-        // Rendering APIs changed in newer Minecraft/Fabric versions; keeping this method as a
-        // pre-filter pass ensures overlay status calculations still execute while avoiding hard
-        // dependencies on removed line-render entrypoints.
+        MatrixStack matrices = context.matrices();
+        VertexConsumerProvider consumers = context.consumers();
+        if (matrices == null || consumers == null || client.gameRenderer == null || client.gameRenderer.getCamera() == null) {
+            return;
+        }
+
+        VertexConsumer lines = consumers.getBuffer(RenderLayers.lines());
+        Vec3d camera = client.gameRenderer.getCamera().getCameraPos();
+
         for (PlacementStatusSnapshot snapshot : snapshots) {
-            pickColor(snapshot);
+            int color = pickColor(snapshot);
+            BlockPos pos = snapshot.absolutePos();
+            VertexRendering.drawOutline(
+                    matrices,
+                    lines,
+                    VoxelShapes.fullCube(),
+                    pos.getX() - camera.x,
+                    pos.getY() - camera.y,
+                    pos.getZ() - camera.z,
+                    color,
+                    0.85f
+            );
         }
     }
 
