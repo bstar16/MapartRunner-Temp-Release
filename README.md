@@ -74,7 +74,7 @@ MapArtRunner integrates with [Baritone](https://github.com/cabaletta/baritone) t
 ## Mod Details
 
 - **Minecraft Version:** 1.21.11
-- **Fabric Loader:** 0.18.1
+- **Fabric Loader:** 0.16.5
 - **Fabric API:** 0.141.3+1.21.11
 - **Java Version:** 21
 
