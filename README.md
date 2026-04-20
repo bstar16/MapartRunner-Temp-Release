@@ -69,11 +69,12 @@ MapArtRunner integrates with [Baritone](https://github.com/cabaletta/baritone) t
 
 - Install a Baritone jar that exposes the `baritone-api-fabric` API for your exact Minecraft version (1.21.11 in this project).
 - If Baritone is missing or the API is mismatched, `/mapart start` now reports a friendly in-game error and assisted movement is disabled until a compatible Baritone jar is installed.
+- Note 1.21.11 baritone api isn't in the releases however it was pushed into the main branch 3 weeks ago, linked [here](https://github.com/cabaletta/baritone/actions/runs/23763140478) will remove once available and these build files may also become dead eventually 
 
 ## Mod Details
 
 - **Minecraft Version:** 1.21.11
-- **Fabric Loader:** 0.16.5
+- **Fabric Loader:** 0.18.1
 - **Fabric API:** 0.141.3+1.21.11
 - **Java Version:** 21
 
